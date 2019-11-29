@@ -1,12 +1,18 @@
 #include "Game.hpp"
 
 Game::Game() { }
+
 Game::Game(int currentTick, Properties properties, Level level, std::vector<Player> players, std::vector<Unit> units, std::vector<Bullet> bullets, std::vector<Mine> mines, std::vector<LootBox> lootBoxes) : currentTick(currentTick), properties(properties), level(level), players(players), units(units), bullets(bullets), mines(mines), lootBoxes(lootBoxes) { }
-Game Game::readFrom(InputStream& stream) {
-    Game result;
+
+Game * Game::readFrom(InputStream& stream) {
+    static Game result;
+
     result.currentTick = stream.readInt();
+
+    //@TODO optimize it
     result.properties = Properties::readFrom(stream);
     result.level = Level::readFrom(stream);
+
     result.players = std::vector<Player>(stream.readInt());
     for (size_t i = 0; i < result.players.size(); i++) {
         result.players[i] = Player::readFrom(stream);
@@ -27,7 +33,8 @@ Game Game::readFrom(InputStream& stream) {
     for (size_t i = 0; i < result.lootBoxes.size(); i++) {
         result.lootBoxes[i] = LootBox::readFrom(stream);
     }
-    return result;
+
+    return &result;
 }
 void Game::writeTo(OutputStream& stream) const {
     stream.write(currentTick);

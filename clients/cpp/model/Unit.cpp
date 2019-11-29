@@ -58,3 +58,7 @@ std::string Unit::toString() const {
         "TODO" + 
         ")";
 }
+
+void Unit::move(double velocity) {
+    position.x += velocity;
+}

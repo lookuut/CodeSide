@@ -97,9 +97,9 @@
 class PlayerView {
 public:
     int myId;
-    Game game;
+    Game * game;
     PlayerView();
-    PlayerView(int myId, Game game);
+    PlayerView(int myId, Game * game);
     static PlayerView readFrom(InputStream& stream);
     void writeTo(OutputStream& stream) const;
     std::string toString() const;

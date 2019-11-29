@@ -4,12 +4,11 @@
 #include "../Stream.hpp"
 #include <string>
 #include <vector>
-#include <vector>
-#include <stdexcept>
 #include "Tile.hpp"
 
 class Level {
 public:
+
     std::vector<std::vector<Tile>> tiles;
     Level();
     Level(std::vector<std::vector<Tile>> tiles);
