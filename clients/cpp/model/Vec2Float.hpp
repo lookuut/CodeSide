@@ -3,6 +3,7 @@
 
 #include "../Stream.hpp"
 #include <string>
+#include "Vec2Double.hpp"
 
 class Vec2Float {
 public:
@@ -10,6 +11,7 @@ public:
     float y;
     Vec2Float();
     Vec2Float(float x, float y);
+    Vec2Float(const Vec2Double & vec);
     static Vec2Float readFrom(InputStream& stream);
     void writeTo(OutputStream& stream) const;
     std::string toString() const;

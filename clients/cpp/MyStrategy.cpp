@@ -1,4 +1,5 @@
 #include "MyStrategy.hpp"
+#include "utils/Geometry.h"
 #include <iostream>
 
 
@@ -68,18 +69,45 @@ UnitAction MyStrategy::getAction(const Unit &unit, const Game &game,
         targetPos = nearestEnemy->position;
     }
 
+
+
+    for (auto const & wall : game.level.walls) {
+        vector<ColoredVertex> vertices;
+        for (auto const & point : wall) {
+            ColoredVertex vertex(point, ColorFloat(1.0, .0, .0, .5));
+            vertices.push_back(vertex);
+        }
+
+        CustomData::Polygon polygon(vertices);
+        debug.draw(polygon);
+    }
+
     debug.draw(CustomData::Log(
             std::string("Target pos: ") + targetPos.toString()));
 
     Vec2Double aim = Vec2Double(0, 0);
 
+    UnitAction action;
+    action.shoot = true;
+
     if (nearestEnemy != nullptr) {
         aim = Vec2Double(nearestEnemy->position.x - unit.position.x,
                          nearestEnemy->position.y - unit.position.y);
+
+        Vec2Float unitCenter = Vec2Float(unit.position + Vec2Double(0, game.properties.unitSize.y / 2.0));
+        Vec2Float enemyCenter = Vec2Float(nearestEnemy->position + Vec2Double(0, game.properties.unitSize.y / 2.0));
+
+        for (auto const & wall : game.level.walls) {
+            for (int i = 1; i < wall.size(); ++i) {
+                if (Geometry::doIntersect(wall[i - 1], wall[i], unitCenter, enemyCenter)) {
+                    action.shoot = false;
+                    break;
+                }
+            }
+        }
     }
 
-    UnitAction action;
-    action.shoot = true;
+
 
     bool jump = targetPos.y > unit.position.y;
 
@@ -89,14 +117,12 @@ UnitAction MyStrategy::getAction(const Unit &unit, const Game &game,
             game.level.tiles[size_t(unit.position.x + 1)][size_t(unit.position.y)] == Tile::WALL
             ) {
         jump = true;
-        action.shoot = false;
     }
 
     if (targetPos.x < unit.position.x &&
         game.level.tiles[size_t(unit.position.x - 1)][size_t(unit.position.y)] ==
         Tile::WALL) {
         jump = true;
-        action.shoot = false;
     }
 
     cout << "Tick : " << game.currentTick << unit.position.toString() << " " << (game.currentTick > 0 ? (unit.position - prevPos).toString() : "" ) << endl;

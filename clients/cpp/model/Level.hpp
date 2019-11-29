@@ -5,11 +5,17 @@
 #include <string>
 #include <vector>
 #include "Tile.hpp"
+#include "Vec2Float.hpp"
+#include <stdexcept>
+
+using namespace std;
 
 class Level {
 public:
 
-    std::vector<std::vector<Tile>> tiles;
+    vector<vector<Vec2Float>> walls;
+    vector<std::vector<Tile>> tiles;
+
     Level();
     Level(std::vector<std::vector<Tile>> tiles);
     static Level readFrom(InputStream& stream);

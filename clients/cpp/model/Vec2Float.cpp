@@ -2,6 +2,10 @@
 
 Vec2Float::Vec2Float() { }
 Vec2Float::Vec2Float(float x, float y) : x(x), y(y) { }
+Vec2Float::Vec2Float(const Vec2Double &vec) {
+    this->x = vec.x;
+    this->y = vec.y;
+}
 Vec2Float Vec2Float::readFrom(InputStream& stream) {
     Vec2Float result;
     result.x = stream.readFloat();
