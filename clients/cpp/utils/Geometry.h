@@ -6,6 +6,8 @@
 #define AICUP2019_GEOMETRY_H
 
 #include <math.h>
+#include <optional>
+
 using namespace std;
 
 #include "../model/Vec2Float.hpp"
@@ -42,33 +44,33 @@ public:
 
     // The main function that returns true if line segment 'p1q1'
     // and 'p2q2' intersect.
-    static bool doIntersect(const Vec2Float & p1, const Vec2Float & q1, const Vec2Float & p2, const Vec2Float & q2)
+    static std::optional<Vec2Float>  doIntersect(const Vec2Float & fLineStart, const Vec2Float & fLineEnd, const Vec2Float & sLineStart, const Vec2Float & sLineEnd)
     {
-        // Find the four orientations needed for general and
-        // special cases
-        int o1 = orientation(p1, q1, p2);
-        int o2 = orientation(p1, q1, q2);
-        int o3 = orientation(p2, q2, p1);
-        int o4 = orientation(p2, q2, q1);
+        Vec2Float dir1 = fLineEnd - fLineStart;
+        Vec2Float dir2 = sLineEnd - sLineStart;
 
-        // General case
-        if (o1 != o2 && o3 != o4)
-            return true;
+        //считаем уравнения прямых проходящих через отрезки
+        double a1 = -dir1.y;
+        double b1 = +dir1.x;
+        double d1 = -(a1 * fLineStart.x + b1 * fLineStart.y);
 
-        // Special Cases
-        // p1, q1 and p2 are colinear and p2 lies on segment p1q1
-        if (o1 == 0 && onSegment(p1, p2, q1)) return true;
+        double a2 = -dir2.y;
+        double b2 = +dir2.x;
+        double d2 = -(a2 * sLineStart.x + b2 * sLineStart.y);
 
-        // p1, q1 and q2 are colinear and q2 lies on segment p1q1
-        if (o2 == 0 && onSegment(p1, q2, q1)) return true;
+        //подставляем концы отрезков, для выяснения в каких полуплоскотях они
+        double seg1_line2_start = a2 * fLineStart.x + b2 * fLineStart.y + d2;
+        double seg1_line2_end = a2 * fLineEnd.x + b2 * fLineEnd.y + d2;
 
-        // p2, q2 and p1 are colinear and p1 lies on segment p2q2
-        if (o3 == 0 && onSegment(p2, p1, q2)) return true;
+        double seg2_line1_start = a1*sLineStart.x + b1*sLineStart.y + d1;
+        double seg2_line1_end = a1*sLineEnd.x + b1*sLineEnd.y + d1;
 
-        // p2, q2 and q1 are colinear and q1 lies on segment p2q2
-        if (o4 == 0 && onSegment(p2, q1, q2)) return true;
+        //если концы одного отрезка имеют один знак, значит он в одной полуплоскости и пересечения нет.
+        if (seg1_line2_start * seg1_line2_end > 0 || seg2_line1_start * seg2_line1_end > 0)
+            return nullopt;
 
-        return false; // Doesn't fall in any of the above cases
+        double u = seg1_line2_start / (seg1_line2_start - seg1_line2_end);
+        return fLineStart + (dir1 * u);
     }
 };
 #endif //AICUP2019_GEOMETRY_H

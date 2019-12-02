@@ -15,6 +15,10 @@ public:
     static Vec2Float readFrom(InputStream& stream);
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
+
+    Vec2Float operator-(const Vec2Float & v) const;
+    Vec2Float operator+(const Vec2Float & v) const;
+    Vec2Float operator*(double f) const;
 };
 
 #endif

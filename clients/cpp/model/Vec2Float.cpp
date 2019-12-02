@@ -22,3 +22,17 @@ std::string Vec2Float::toString() const {
         std::to_string(y) +
         ")";
 }
+
+
+Vec2Float Vec2Float::operator+(const Vec2Float &v) const {
+    return Vec2Float(x + v.x, y + v.y);
+}
+
+
+Vec2Float Vec2Float::operator-(const Vec2Float &v) const {
+    return Vec2Float(x - v.x, y - v.y);
+}
+
+Vec2Float Vec2Float::operator*(double f) const {
+    return Vec2Float(x * f, y * f);
+}

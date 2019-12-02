@@ -7,6 +7,7 @@
 #include "Tile.hpp"
 #include "Vec2Float.hpp"
 #include <stdexcept>
+#include <optional>
 
 using namespace std;
 
@@ -21,6 +22,7 @@ public:
     static Level readFrom(InputStream& stream);
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
+    optional<Vec2Float> crossWall(const Vec2Float & p1, const Vec2Float & p2) const;
 };
 
 #endif

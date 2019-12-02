@@ -97,13 +97,8 @@ UnitAction MyStrategy::getAction(const Unit &unit, const Game &game,
         Vec2Float unitCenter = Vec2Float(unit.position + Vec2Double(0, game.properties.unitSize.y / 2.0));
         Vec2Float enemyCenter = Vec2Float(nearestEnemy->position + Vec2Double(0, game.properties.unitSize.y / 2.0));
 
-        for (auto const & wall : game.level.walls) {
-            for (int i = 1; i < wall.size(); ++i) {
-                if (Geometry::doIntersect(wall[i - 1], wall[i], unitCenter, enemyCenter)) {
-                    action.shoot = false;
-                    break;
-                }
-            }
+        if (game.level.crossWall(unitCenter, enemyCenter)) {
+            action.shoot = false;
         }
     }
 

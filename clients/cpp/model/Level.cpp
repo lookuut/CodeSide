@@ -1,4 +1,5 @@
 #include "Level.hpp"
+#include "../utils/Geometry.h"
 
 Level::Level() { }
 
@@ -51,6 +52,7 @@ Level Level::readFrom(InputStream& stream) {
                         int startX = x;
 
                         while (x < width and result.tiles[x][y] == Tile::WALL) {
+                            visited[y * width + x] = 1;
                             ++x;
                         }
 
@@ -58,7 +60,6 @@ Level Level::readFrom(InputStream& stream) {
                         wall.push_back(Vec2Float(startX, y + 1));
                         wall.push_back(Vec2Float(x, y + 1));
                         wall.push_back(Vec2Float(x, y));
-
 
                     } else if (y + 1 < height and result.tiles[x][y + 1] == Tile::WALL) {
                         int startHor = y;
@@ -95,4 +96,23 @@ std::string Level::toString() const {
     return std::string("Level") + "(" +
         "TODO" + 
         ")";
+}
+
+
+optional<Vec2Float> Level::crossWall(const Vec2Float &p1, const Vec2Float &p2) const {
+    for (auto const & wall : walls) {
+        int wallLines = wall.size();
+
+        for (int i = 1; i < wallLines; ++i) {
+            if (auto crossPoint = Geometry::doIntersect(wall[i - 1], wall[i], p1, p2)) {
+                return crossPoint;
+            }
+        }
+
+        if (auto crossPoint = Geometry::doIntersect(wall[wallLines - 1], wall[0], p1, p2)) {
+            return crossPoint;
+        }
+    }
+
+    return nullopt;
 }
