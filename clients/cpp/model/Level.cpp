@@ -6,28 +6,28 @@ Level::Level() { }
 Level::Level(std::vector<std::vector<Tile>> tiles) : tiles(tiles) { }
 
 Level Level::readFrom(InputStream& stream) {
-    static Level result;
+    static Level level;
 
-    result.tiles = std::vector<std::vector<Tile>>(stream.readInt());
+    level.tiles = std::vector<std::vector<Tile>>(stream.readInt());
 
-    for (size_t i = 0; i < result.tiles.size(); i++) {
-        result.tiles[i] = std::vector<Tile>(stream.readInt());
-        for (size_t j = 0; j < result.tiles[i].size(); j++) {
+    for (size_t i = 0; i < level.tiles.size(); i++) {
+        level.tiles[i] = std::vector<Tile>(stream.readInt());
+        for (size_t j = 0; j < level.tiles[i].size(); j++) {
             switch (stream.readInt()) {
             case 0:
-                result.tiles[i][j] = Tile::EMPTY;
+                level.tiles[i][j] = Tile::EMPTY;
                 break;
             case 1:
-                result.tiles[i][j] = Tile::WALL;
+                level.tiles[i][j] = Tile::WALL;
                 break;
             case 2:
-                result.tiles[i][j] = Tile::PLATFORM;
+                level.tiles[i][j] = Tile::PLATFORM;
                 break;
             case 3:
-                result.tiles[i][j] = Tile::LADDER;
+                level.tiles[i][j] = Tile::LADDER;
                 break;
             case 4:
-                result.tiles[i][j] = Tile::JUMP_PAD;
+                level.tiles[i][j] = Tile::JUMP_PAD;
                 break;
             default:
                 throw std::runtime_error("Unexpected discriminant value");
@@ -35,54 +35,72 @@ Level Level::readFrom(InputStream& stream) {
         }
     }
 
-    if (result.walls.empty()) {
+    if (level.walls.empty()) {
+        level.width = level.tiles.size();
+        level.height = level.tiles[0].size();
 
-        int width = result.tiles.size();
-        int height = result.tiles[0].size();
+        level.buildWalls();
+        level.buildStandablePlaces();
+    }
 
-        vector<int> visited = vector<int>(width * height, 0);
+    return level;
+}
 
-        for (int y = 0; y < height; ++y) {
-            for (int x = 0; x < width; ++x) {
 
-                if (result.tiles[x][y] == Tile::WALL and visited[y * width + x] == 0) {
-                    vector<Vec2Float> wall;
+void Level::buildWalls() {
+    vector<int> visited = vector<int>(width * height, 0);
 
-                    if (x + 1 < width and result.tiles[x + 1][y] == Tile::WALL) {
-                        int startX = x;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
 
-                        while (x < width and result.tiles[x][y] == Tile::WALL) {
-                            visited[y * width + x] = 1;
-                            ++x;
-                        }
+            if (tiles[x][y] == Tile::WALL and visited[y * width + x] == 0) {
+                vector<Vec2Float> wall;
 
-                        wall.push_back(Vec2Float(startX, y));
-                        wall.push_back(Vec2Float(startX, y + 1));
-                        wall.push_back(Vec2Float(x, y + 1));
-                        wall.push_back(Vec2Float(x, y));
+                if (x + 1 < width and tiles[x + 1][y] == Tile::WALL) {
+                    int startX = x;
 
-                    } else if (y + 1 < height and result.tiles[x][y + 1] == Tile::WALL) {
-                        int startHor = y;
-                        int hor = y;
-
-                        while (hor < height and result.tiles[x][hor] == Tile::WALL) {
-                            visited[hor * width + x] = 1;
-                            ++hor;
-                        }
-
-                        wall.push_back(Vec2Float(x, startHor));
-                        wall.push_back(Vec2Float(x + 1, startHor));
-                        wall.push_back(Vec2Float(x + 1, hor));
-                        wall.push_back(Vec2Float(x, hor));
+                    while (x < width and tiles[x][y] == Tile::WALL) {
+                        visited[y * width + x] = 1;
+                        ++x;
                     }
-                    result.walls.push_back(wall);
+
+                    wall.push_back(Vec2Float(startX, y));
+                    wall.push_back(Vec2Float(startX, y + 1));
+                    wall.push_back(Vec2Float(x, y + 1));
+                    wall.push_back(Vec2Float(x, y));
+
+                } else if (y + 1 < height and tiles[x][y + 1] == Tile::WALL) {
+                    int startHor = y;
+                    int hor = y;
+
+                    while (hor < height and tiles[x][hor] == Tile::WALL) {
+                        visited[hor * width + x] = 1;
+                        ++hor;
+                    }
+
+                    wall.push_back(Vec2Float(x, startHor));
+                    wall.push_back(Vec2Float(x + 1, startHor));
+                    wall.push_back(Vec2Float(x + 1, hor));
+                    wall.push_back(Vec2Float(x, hor));
                 }
+                walls.push_back(wall);
             }
         }
     }
-
-    return result;
 }
+
+void Level::buildStandablePlaces() {
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            if (tiles[x][y] == Tile::LADDER) {
+                standablePlaces.push_back(Vec2Float(x, y));
+            } else if (y + 1 < height and (tiles[x][y] == Tile::WALL or tiles[x][y] == Tile::PLATFORM) and tiles[x][y + 1] == Tile::EMPTY) {
+                standablePlaces.push_back(Vec2Float(x, y + 1));
+            }
+        }
+    }
+}
+
 void Level::writeTo(OutputStream& stream) const {
     stream.write((int)(tiles.size()));
     for (const std::vector<Tile>& tilesElement : tiles) {

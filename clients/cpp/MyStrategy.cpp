@@ -69,19 +69,7 @@ UnitAction MyStrategy::getAction(const Unit &unit, const Game &game,
         targetPos = nearestEnemy->position;
     }
 
-
-
-    for (auto const & wall : game.level.walls) {
-        vector<ColoredVertex> vertices;
-        for (auto const & point : wall) {
-            ColoredVertex vertex(point, ColorFloat(1.0, .0, .0, .5));
-            vertices.push_back(vertex);
-        }
-
-        CustomData::Polygon polygon(vertices);
-        debug.draw(polygon);
-    }
-
+    
     debug.draw(CustomData::Log(
             std::string("Target pos: ") + targetPos.toString()));
 

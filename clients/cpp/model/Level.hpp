@@ -8,13 +8,17 @@
 #include "Vec2Float.hpp"
 #include <stdexcept>
 #include <optional>
+#include <map>
 
 using namespace std;
 
 class Level {
 public:
+    int width;
+    int height;
 
     vector<vector<Vec2Float>> walls;
+    vector<Vec2Float> standablePlaces;
     vector<std::vector<Tile>> tiles;
 
     Level();
@@ -23,6 +27,9 @@ public:
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
     optional<Vec2Float> crossWall(const Vec2Float & p1, const Vec2Float & p2) const;
+
+    void buildWalls();
+    void buildStandablePlaces();
 };
 
 #endif
