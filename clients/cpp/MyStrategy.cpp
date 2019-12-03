@@ -48,7 +48,6 @@ UnitAction MyStrategy::getAction(const Unit &unit, const Game &game,
         }
     }
 
-
     const Mine *nearestMine = nullptr;
 
     for (const Mine &mine : game.mines) {

@@ -1,5 +1,11 @@
+# December 3
+
+- Weapon can now be reloaded manually (`UnitAction.reload`)
+
 # December 2
 
+- Increased score for killing enemy unit to 1000
+- Added F#
 - Added Scala
 
 # November 29
