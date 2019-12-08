@@ -11,36 +11,10 @@
 using namespace std;
 
 #include "../model/Vec2Float.hpp"
+#include "../model/Vec2Double.hpp"
 
 class Geometry{
 public:
-
-    static bool onSegment(const Vec2Float & p, const Vec2Float & q,  const Vec2Float & r)
-    {
-        if (q.x <= max(p.x, r.x) && q.x >= min(p.x, r.x) &&
-            q.y <= max(p.y, r.y) && q.y >= min(p.y, r.y))
-            return true;
-
-        return false;
-    }
-
-
-    // To find orientation of ordered triplet (p, q, r).
-    // The function returns following values
-    // 0 --> p, q and r are colinear
-    // 1 --> Clockwise
-    // 2 --> Counterclockwise
-
-    static int orientation(const Vec2Float & p, const Vec2Float & q, const Vec2Float & r)
-    {
-        // for details of below formula.
-        int val = (q.y - p.y) * (r.x - q.x) -
-                  (q.x - p.x) * (r.y - q.y);
-
-        if (val == 0) return 0;  // colinear
-
-        return (val > 0)? 1: 2; // clock or counterclock wise
-    }
 
     // The main function that returns true if line segment 'p1q1'
     // and 'p2q2' intersect.
@@ -71,6 +45,20 @@ public:
 
         double u = seg1_line2_start / (seg1_line2_start - seg1_line2_end);
         return fLineStart + (dir1 * u);
+    }
+
+
+
+    static bool isRectOverlap(const Vec2Double &l1, const Vec2Double &r1, const Vec2Double &l2, const Vec2Double &r2) {
+        // If one rectangle is on left side of other
+        if (l1.x > r2.x || l2.x > r1.x)
+            return false;
+
+        // If one rectangle is above other
+        if (l1.y < r2.y || l2.y < r1.y)
+            return false;
+
+        return true;
     }
 };
 #endif //AICUP2019_GEOMETRY_H

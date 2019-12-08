@@ -3,8 +3,9 @@
 
 #include "../Stream.hpp"
 #include <string>
-#include "Vec2Double.hpp"
 
+
+class Vec2Double;
 class Vec2Float {
 public:
     float x;
@@ -19,6 +20,10 @@ public:
     Vec2Float operator-(const Vec2Float & v) const;
     Vec2Float operator+(const Vec2Float & v) const;
     Vec2Float operator*(double f) const;
+    Vec2Float rotate(double angle) const;
+    float sqrLen() const {
+        return (x * x + y * y);
+    }
 };
 
 #endif

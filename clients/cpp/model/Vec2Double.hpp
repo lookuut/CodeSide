@@ -3,6 +3,8 @@
 
 #include "../Stream.hpp"
 #include <string>
+#include <math.h>
+#include "Vec2Float.hpp"
 
 class Vec2Double {
 public:
@@ -29,6 +31,14 @@ public:
     void operator-=(const Vec2Double & vec);
     bool operator==(const Vec2Double & vec);
     bool operator!=(const Vec2Double & vec);
+
+    void operator*=(double f);
+
+    double len() const;
+    double sqrLen() const;
+    Vec2Double& normalize();
+    Vec2Double rotate(double angle) const;
+    Vec2Float toFloat();
 };
 
 

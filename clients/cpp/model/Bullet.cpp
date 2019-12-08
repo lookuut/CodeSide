@@ -1,4 +1,6 @@
 #include "Bullet.hpp"
+#include "../utils/Geometry.h"
+#include "Unit.hpp"
 
 Bullet::Bullet() { }
 Bullet::Bullet(WeaponType weaponType, int unitId, int playerId, Vec2Double position, Vec2Double velocity, int damage, double size, std::shared_ptr<ExplosionParams> explosionParams) : weaponType(weaponType), unitId(unitId), playerId(playerId), position(position), velocity(velocity), damage(damage), size(size), explosionParams(explosionParams) { }
@@ -57,4 +59,36 @@ std::string Bullet::toString() const {
         std::to_string(size) +
         "TODO" + 
         ")";
+}
+
+void Bullet::explossion(vector<Unit> &units) const {
+
+    if (weaponType != WeaponType::ROCKET_LAUNCHER) {
+        return;
+    }
+
+    for (Unit & unit : units) {
+        double r = explosionParams.get()->radius;
+
+        Vec2Double explossionLeft = Vec2Double(position.x - r, position.y + r);
+        Vec2Double explossionRight = Vec2Double(position.x + r, position.y - r);
+
+        Vec2Double unitLeft = Vec2Double(unit.position.x - unit.size.x / 2.0, unit.position.y + unit.size.y);
+        Vec2Double unitRight = Vec2Double(unit.position.x + unit.size.x / 2.0, unit.position.y);
+
+        if (Geometry::isRectOverlap(explossionLeft, explossionRight, unitLeft, unitRight)) {
+            unit.health -= explosionParams.get()->damage;
+        }
+    }
+}
+
+
+bool Bullet::equal(const Bullet &bullet, double eps) const {
+    return bullet.weaponType == bullet.weaponType and (bullet.position - position).len() <= eps;
+}
+
+
+void Bullet::move(const Vec2Double & vel) {
+    position.x += (vel.x * Properties::getProperty().microticksPerSecond);
+    position.y += (vel.y * Properties::getProperty().microticksPerSecond);
 }

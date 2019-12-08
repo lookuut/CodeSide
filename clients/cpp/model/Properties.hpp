@@ -44,10 +44,13 @@ public:
     double minePrepareTime;
     double mineTriggerTime;
     double mineTriggerRadius;
+    double microticksPerSecond;
     int killScore;
     Properties();
     Properties(int maxTickCount, int teamSize, double ticksPerSecond, int updatesPerTick, Vec2Double lootBoxSize, Vec2Double unitSize, double unitMaxHorizontalSpeed, double unitFallSpeed, double unitJumpTime, double unitJumpSpeed, double jumpPadJumpTime, double jumpPadJumpSpeed, int unitMaxHealth, int healthPackHealth, std::unordered_map<WeaponType, WeaponParams> weaponParams, Vec2Double mineSize, ExplosionParams mineExplosionParams, double minePrepareTime, double mineTriggerTime, double mineTriggerRadius, int killScore);
     static Properties readFrom(InputStream& stream);
+    static Properties & getProperty();
+
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
 };

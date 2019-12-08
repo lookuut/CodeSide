@@ -24,3 +24,8 @@ std::string JumpState::toString() const {
         (canCancel ? "true" : "false") + 
         ")";
 }
+
+
+bool JumpState::equal(const JumpState &state, double eps) const {
+    return state.canCancel == state.canCancel and state.canJump == canJump and abs(state.speed - speed) <= 0 and abs(state.maxTime - maxTime) <= eps;
+}

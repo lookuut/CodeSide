@@ -6,16 +6,29 @@
 #include "model/Game.hpp"
 #include "model/Unit.hpp"
 #include "model/UnitAction.hpp"
+#include "arena/Arena.hpp"
 
 class MyStrategy {
 private:
 
-    Vec2Double prevPos;
-    Vec2Double bulletPrevPos = ZERO_VEC_2_DOUBLE;
-
+    Arena arena;
+    Properties properties;
+    int unitIndex;
+    int enemyPlayerId;
+    int allyPlayerId;
 public:
   MyStrategy();
   UnitAction getAction(const Unit &unit, const Game &game, Debug &debug);
+
+  UnitAction simulationTest(const Unit &unit, const Game &game, Debug &debug);
+
+  double simulation(Arena arena, int deep, int unitIndex);
+
+  void shootLogic(UnitAction & action, const Unit &unit, const Game &game, Debug &debug);
+
+  UnitAction bestAction();
+
+  double evaluation(const Unit & unit, Game & game);
 };
 
 #endif

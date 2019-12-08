@@ -26,11 +26,14 @@
 #include "../model/Bullet.hpp"
 #include "../model/Mine.hpp"
 #include "../model/LootBox.hpp"
+#include "../model/UnitAction.hpp"
+#include "../Consts.h"
+#include <math.h>
 
 class Arena {
 private:
     int currentTick = 0;
-
+    double microTicksPerSecond;
 public:
     Properties properties;
     Level level;
@@ -39,26 +42,33 @@ public:
     std::vector<Bullet> bullets;
     std::vector<Mine> mines;
     std::vector<LootBox> lootBoxes;
+
     Arena();
 
     Arena(
-            Properties &properties,
-            Level &level,
-            std::vector<Player> &players,
-            std::vector<Unit> &units,
-            std::vector<Bullet> &bullets,
-            std::vector<Mine> &mines,
-            std::vector<LootBox> &lootBoxes
+            const Properties &properties,
+            const Level &level,
+            const std::vector<Player> &players,
+            const std::vector<Unit> &units,
+            const std::vector<Bullet> &bullets,
+            const std::vector<Mine> &mines,
+            const std::vector<LootBox> &lootBoxes
             );
 
-
     void tick();
+
+    void bulletMicrotick();
+    void bulletOverlapWithUnit(Unit & unit);
+    void bulletWallOverlap();
 
     static Arena readFrom(InputStream& stream);
 
     void writeTo(OutputStream& stream) const;
 
     std::string toString() const;
+    void pickUpLoots(Unit & unit);
+
+    static const int microticks = Consts::microticks;
 };
 
 #endif //AICUP2019_ARENA_HPP

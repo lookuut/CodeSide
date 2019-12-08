@@ -3,6 +3,7 @@
 
 #include "../Stream.hpp"
 #include <string>
+#include <math.h>
 
 class JumpState {
 public:
@@ -15,6 +16,8 @@ public:
     static JumpState readFrom(InputStream& stream);
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
+
+    bool equal(const JumpState & state, double eps) const;
 };
 
 #endif

@@ -1,4 +1,5 @@
 #include "Vec2Float.hpp"
+#include "Vec2Double.hpp"
 
 Vec2Float::Vec2Float() { }
 Vec2Float::Vec2Float(float x, float y) : x(x), y(y) { }
@@ -35,4 +36,8 @@ Vec2Float Vec2Float::operator-(const Vec2Float &v) const {
 
 Vec2Float Vec2Float::operator*(double f) const {
     return Vec2Float(x * f, y * f);
+}
+
+Vec2Float Vec2Float::rotate(double angle) const{
+    return Vec2Float(x * cos(angle) - y * sin(angle), y * cos(angle) + x * sin(angle));
 }

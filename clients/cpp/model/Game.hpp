@@ -102,15 +102,13 @@ private:
     Game();
     Game(int currentTick, Properties properties, Level level, std::vector<Player> players, std::vector<Unit> units, std::vector<Bullet> bullets, std::vector<Mine> mines, std::vector<LootBox> lootBoxes);
 
-    int propertiesSizeOf;
-    int levelsSizeOf;
-
 public:
     int currentTick;
     Properties properties;
     Level level;
     std::vector<Player> players;
     std::vector<Unit> units;
+    std::map<int, vector<Unit*>> playerUnits;
     std::vector<Bullet> bullets;
     std::vector<Mine> mines;
     std::vector<LootBox> lootBoxes;
@@ -119,6 +117,8 @@ public:
 
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
+
+    static Game & getInstance();
 };
 
 #endif

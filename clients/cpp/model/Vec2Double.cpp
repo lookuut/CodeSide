@@ -49,3 +49,32 @@ bool Vec2Double::operator==(const Vec2Double &vec) {
 bool Vec2Double::operator!=(const Vec2Double &vec) {
     return !(*this == vec);
 }
+
+void Vec2Double::operator*=(double f) {
+    x *=f;
+    y *=f;
+}
+
+double Vec2Double::len() const {
+    return sqrt(x * x + y * y);
+}
+
+double Vec2Double::sqrLen() const {
+    return x * x + y * y;
+}
+
+Vec2Double& Vec2Double::normalize(){
+    double l = len();
+
+    x = x / l;
+    y = y / l;
+    return *this;
+}
+
+Vec2Double Vec2Double::rotate(double angle) const{
+    return Vec2Double(x * cos(angle) - y * sin(angle), y * cos(angle) + x * sin(angle));
+}
+
+Vec2Float Vec2Double::toFloat() {
+    return Vec2Float((float)x, (float)y);
+}

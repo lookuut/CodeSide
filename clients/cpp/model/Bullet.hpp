@@ -5,13 +5,14 @@
 #include <string>
 #include <stdexcept>
 #include "WeaponType.hpp"
-#include <stdexcept>
-#include "Vec2Double.hpp"
-#include <stdexcept>
 #include "Vec2Double.hpp"
 #include <memory>
-#include <stdexcept>
 #include "ExplosionParams.hpp"
+#include <math.h>
+#include <vector>
+using namespace std;
+
+class Unit;
 
 class Bullet {
 public:
@@ -28,6 +29,11 @@ public:
     static Bullet readFrom(InputStream& stream);
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
+
+    void explossion(vector<Unit> &units) const;
+
+    bool equal(const Bullet &bullet, double eps) const;
+    void move(const Vec2Double & vel);
 };
 
 #endif

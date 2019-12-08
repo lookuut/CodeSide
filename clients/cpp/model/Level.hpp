@@ -4,11 +4,11 @@
 #include "../Stream.hpp"
 #include <string>
 #include <vector>
-#include "Tile.hpp"
 #include "Vec2Float.hpp"
 #include <stdexcept>
 #include <optional>
 #include <map>
+#include "Tile.hpp"
 
 using namespace std;
 
