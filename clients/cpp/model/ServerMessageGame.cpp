@@ -27,10 +27,10 @@ ServerMessageGame ServerMessageGame::updateTick(InputStream &stream) {
 
 void ServerMessageGame::writeTo(OutputStream& stream) const {
     if (playerView) {
-        stream.write(false);
-    } else {
         stream.write(true);
         (*playerView).writeTo(stream);
+    } else {
+        stream.write(false);
     }
 }
 std::string ServerMessageGame::toString() const {
