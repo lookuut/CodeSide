@@ -29,46 +29,41 @@
 #include "../model/UnitAction.hpp"
 #include "../Consts.h"
 #include <math.h>
+#include <vector>
 
 class Arena {
 private:
     int currentTick = 0;
     double microTicksPerSecond;
 public:
-    Properties properties;
-    Level level;
-    std::vector<Player> players;
+    Properties * properties;
+    Level * level;
+
     std::vector<Unit> units;
     std::vector<Bullet> bullets;
     std::vector<Mine> mines;
-    std::vector<LootBox> lootBoxes;
 
-    Arena();
+    std::vector<LootBox> lootHealthPacks;
+    std::vector<LootBox> lootWeapons;
+    std::vector<LootBox> lootMines;
 
-    Arena(
-            const Properties &properties,
-            const Level &level,
-            const std::vector<Player> &players,
-            const std::vector<Unit> &units,
-            const std::vector<Bullet> &bullets,
-            const std::vector<Mine> &mines,
-            const std::vector<LootBox> &lootBoxes
-            );
+    Arena(Properties * properties, Level * level);
 
-    void tick();
+    void update(const std::vector<Unit> &units,
+                const std::vector<Bullet> &bullets,
+                const std::vector<Mine> &mines,
+                const std::vector<LootBox> &lootHealthPacks,
+                const std::vector<LootBox> &lootWeapons,
+                const std::vector<LootBox> &lootMines);
+
+    void tick(const vector<UnitAction> & actions);
 
     void bulletMicrotick();
     void bulletOverlapWithUnit(Unit & unit);
     void bulletWallOverlap();
 
-    static Arena readFrom(InputStream& stream);
-
-    void writeTo(OutputStream& stream) const;
-
     std::string toString() const;
     void pickUpLoots(Unit & unit);
-
-    static const int microticks = Consts::microticks;
 };
 
 #endif //AICUP2019_ARENA_HPP

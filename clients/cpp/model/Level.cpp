@@ -1,13 +1,14 @@
 #include "Level.hpp"
 #include "../utils/Geometry.h"
+#include "ColorFloat.hpp"
+#include "CustomData.hpp"
 
 Level::Level() { }
 
 Level::Level(std::vector<std::vector<Tile>> tiles) : tiles(tiles) { }
 
 Level Level::readFrom(InputStream& stream) {
-    static Level level;
-
+    Level level;
     level.tiles = std::vector<std::vector<Tile>>(stream.readInt());
 
     for (size_t i = 0; i < level.tiles.size(); i++) {
@@ -33,14 +34,6 @@ Level Level::readFrom(InputStream& stream) {
                 throw std::runtime_error("Unexpected discriminant value");
             }
         }
-    }
-
-    if (level.walls.empty()) {
-        level.width = level.tiles.size();
-        level.height = level.tiles[0].size();
-
-        level.buildWalls();
-        level.buildStandablePlaces();
     }
 
     return level;
@@ -133,4 +126,31 @@ optional<Vec2Float> Level::crossWall(const Vec2Float &p1, const Vec2Float &p2) c
     }
 
     return nullopt;
+}
+
+optional<Vec2Float> Level::crossMiDistanceWall(const Vec2Float &p1, const Vec2Float &p2) const {
+    float minDistance = -1;
+
+    optional<Vec2Float> minDistancePoint = nullopt;
+    for (auto const & wall : walls) {
+        int wallLines = wall.size();
+
+        for (int i = 1; i < wallLines; ++i) {
+            if (auto crossPoint = Geometry::doIntersect(wall[i - 1], wall[i], p1, p2)) {
+                if ( minDistance < 0 or (crossPoint.value() - p1).sqrLen() < minDistance ) {
+                    minDistance = (crossPoint.value() - p1).sqrLen();
+                    minDistancePoint = crossPoint;
+                }
+            }
+        }
+
+        if (auto crossPoint = Geometry::doIntersect(wall[wallLines - 1], wall[0], p1, p2)) {
+            if ( minDistance < 0 or (crossPoint.value() - p1).sqrLen() < minDistance ) {
+                minDistance = (crossPoint.value() - p1).sqrLen();
+                minDistancePoint = crossPoint;
+            }
+        }
+    }
+
+    return minDistancePoint;
 }

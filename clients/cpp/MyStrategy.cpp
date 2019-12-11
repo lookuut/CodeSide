@@ -14,39 +14,45 @@ template <typename T> int sgn(T val) {
 
 using namespace std;
 
-MyStrategy::MyStrategy() {}
+MyStrategy::MyStrategy(Properties * properties, Level * level, int playerId, int enemyPlayerId, const vector<Unit> & units):
+properties(properties),
+level(level),
+allyPlayerId(playerId),
+enemyPlayerId(enemyPlayerId),
+arena(properties, level)
+{
+    unitIndex = 0;
 
-double distSqr(Vec2Double a, Vec2Double b) {
-    return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
+    actions = vector<UnitAction>(5, UnitAction());
 }
 
 UnitAction MyStrategy::getAction(const Unit &unit, const Game &game,
                                  Debug &debug) {
     //return simulationTest(unit, game, debug);
-    chrono::system_clock::time_point start = chrono::system_clock::now();
 
     vector<Unit> units = {unit};
+    arena.update(units, game.bullets, game.mines, game.lootHealthPacks, game.lootWeapons, game.lootMines);
 
-    if (game.currentTick == 0) {
-        arena = Arena(game.properties, game.level, game.players, units, game.bullets, game.mines, game.lootBoxes);
-        allyPlayerId = unit.playerId;
-        enemyPlayerId = (allyPlayerId != game.players[0].id ? game.players[0].id : game.players[1].id);
-        properties = game.properties;
-        unitIndex = 0;
-    } else {
-        arena.bullets = game.bullets;
-        arena.units = units;
-        arena.lootBoxes = game.lootBoxes;
-        arena.mines = game.mines;
+    const LootBox *nearestWeapon = nullptr;
+
+    for (const LootBox &lootBox : game.lootWeapons) {
+        if (nearestWeapon == nullptr ||
+            unit.position.distSqr(lootBox.position) < unit.position.distSqr(nearestWeapon->position)) {
+            nearestWeapon = &lootBox;
+        }
+
     }
 
+    nearestWeaponPos = nearestWeapon->position;
+
+    chrono::system_clock::time_point start = chrono::system_clock::now();
 
     UnitAction action = bestAction();
     shootLogic(action, unit, game, debug);
 
     chrono::system_clock::time_point end = chrono::system_clock::now();
     long micros = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    cout << "Tick " << game.currentTick << "perfomance" << micros << endl;
+    cout << "Tick " << game.currentTick << " perfomance " << micros << endl;
 
     return action;
 }
@@ -58,8 +64,7 @@ UnitAction MyStrategy::simulationTest(const Unit &unit, const Game &game, Debug 
     vector<Unit> units = {unit};
 
     if (game.currentTick == 0) {
-        arena = Arena(game.properties, game.level, game.players, units, game.bullets, game.mines, game.lootBoxes);
-        properties = game.properties;
+        arena.update(units, game.bullets, game.mines, game.lootHealthPacks, game.lootWeapons, game.lootMines);
     }
 
     if (arena.bullets.size() < game.bullets.size()) {
@@ -67,6 +72,8 @@ UnitAction MyStrategy::simulationTest(const Unit &unit, const Game &game, Debug 
     }
 
     cout << (arena.units.front().position.x - unit.position.x) << " " << (arena.units.front().position.y - unit.position.y) << endl;
+    cout << arena.units.front().position.y << " " << unit.position.y << endl;
+
 
     if (!arena.units.front().equal(unit, Consts::eps)) {
         cout << "Not equal" << endl;
@@ -85,180 +92,213 @@ UnitAction MyStrategy::simulationTest(const Unit &unit, const Game &game, Debug 
         }
     }
 
-    UnitAction action;
-    action.shoot = false;
 
-    action.aim = ZERO_VEC_2_DOUBLE;
-    action.reload = false;
-    action.swapWeapon = false;
-    action.plantMine = false;
-
-    action.jump = true;
-    action.jumpDown = !action.jump;
-    action.velocity = -properties.unitMaxHorizontalSpeed;
-    arena.units.front().setAction(action);
-
-    arena.tick();
-
-    for (const Bullet & bullet : arena.bullets) {
-        Vec2Float p = Vec2Float(bullet.position.x - bullet.size / 2.0, bullet.position.y - bullet.size / 2.0);
-        Vec2Float s = Vec2Float(bullet.size, bullet.size);
-        debug.draw(CustomData::Rect(p, s, ColorFloat(0.0,1.0,0.0, 1.0)));
+    if (arena.lootWeapons.size() != game.lootWeapons.size()) {
+        cout << "Not equal";
     }
 
-    return action;
+    if (arena.lootMines.size() != game.lootMines.size()) {
+        cout << "Not equal";
+    }
+
+    if (arena.lootHealthPacks.size() != game.lootHealthPacks.size()) {
+        cout << "Not equal";
+    }
+
+
+    actions[unit.id].shoot = false;
+
+    actions[unit.id].aim = ZERO_VEC_2_DOUBLE;
+    actions[unit.id].reload = false;
+    actions[unit.id].swapWeapon = false;
+    actions[unit.id].plantMine = false;
+
+    actions[unit.id].jump = true;
+    actions[unit.id].jumpDown = !actions[unit.id].jump;
+    actions[unit.id].velocity = (game.currentTick % 17000 < 8000 ? -properties->unitMaxHorizontalSpeed : properties->unitMaxHorizontalSpeed);
+
+    arena.tick(actions);
+
+    return actions[unit.id];
 }
 
 UnitAction MyStrategy::bestAction() {
 
+    int unitId = arena.units[unitIndex].id;
     bool canJump = arena.units[unitIndex].jumpState.canJump;
     bool canCancel = arena.units[unitIndex].jumpState.canCancel;
 
-    UnitAction action;
-    action.shoot = false;
+    actions[unitId].shoot = false;
 
-    action.jump = false;
-    action.jumpDown = !action.jump;
-    action.aim = ZERO_VEC_2_DOUBLE;
-    action.reload = false;
-    action.swapWeapon = false;
-    action.plantMine = false;
+    actions[unitId].jump = false;
+    actions[unitId].jumpDown = !actions[unitId].jump;
+    actions[unitId].aim = ZERO_VEC_2_DOUBLE;
+    actions[unitId].reload = false;
+    actions[unitId].swapWeapon = false;
+    actions[unitId].plantMine = false;
 
-    UnitAction bestAction = action;
+    UnitAction bestAction = actions[unitId];
 
     double maxEvaluationValue = 0;
 
     if (canCancel) {
-        action.jump = false;
-        action.jumpDown = !action.jump;
-
-        action.velocity = properties.unitMaxHorizontalSpeed;
-        arena.units[unitIndex].setAction(action);
+        actions[unitId].jump = false;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = properties->unitMaxHorizontalSpeed;
 
         double evaluationValue = simulation(arena, 1, unitIndex);
 
         if (evaluationValue > maxEvaluationValue) {
             maxEvaluationValue = evaluationValue;
-            bestAction = action;
+            bestAction.jump = false;
+            bestAction.jumpDown = !bestAction.jump;
+            bestAction.velocity = properties->unitMaxHorizontalSpeed;
         }
-        action.velocity = -properties.unitMaxHorizontalSpeed;
-        arena.units[unitIndex].setAction(action);
+
+        actions[unitId].jump = false;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = -properties->unitMaxHorizontalSpeed;
 
         evaluationValue = simulation(arena, 1, unitIndex);
 
         if (evaluationValue > maxEvaluationValue) {
             maxEvaluationValue = evaluationValue;
-            bestAction = action;
+            bestAction.jump = false;
+            bestAction.jumpDown = !bestAction.jump;
+            bestAction.velocity = -properties->unitMaxHorizontalSpeed;
         }
     }
 
     if (canJump) {
-        action.jump = true;
-        action.jumpDown = !action.jump;
-        action.velocity = properties.unitMaxHorizontalSpeed;
-        arena.units[unitIndex].setAction(action);
+        actions[unitId].jump = true;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = properties->unitMaxHorizontalSpeed;
 
         double evaluationValue = simulation(arena, 1, unitIndex);
 
         if (evaluationValue > maxEvaluationValue) {
             maxEvaluationValue = evaluationValue;
-            bestAction = action;
+            bestAction.jump = true;
+            bestAction.jumpDown = !bestAction.jump;
+            bestAction.velocity = properties->unitMaxHorizontalSpeed;
         }
 
-        action.velocity = -properties.unitMaxHorizontalSpeed;
-        arena.units[unitIndex].setAction(action);
+        actions[unitId].jump = true;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = -properties->unitMaxHorizontalSpeed;
 
         evaluationValue = simulation(arena, 1, unitIndex);
 
         if (evaluationValue > maxEvaluationValue) {
             maxEvaluationValue = evaluationValue;
-            bestAction = action;
+            bestAction.jump = true;
+            bestAction.jumpDown = !bestAction.jump;
+            bestAction.velocity = -properties->unitMaxHorizontalSpeed;
         }
     }
 
     if (!canJump and !canCancel) {
-        action.jump = false;
-        action.jumpDown = !action.jump;
 
-        action.velocity = properties.unitMaxHorizontalSpeed;
-        arena.units[unitIndex].setAction(action);
+        actions[unitId].jump = false;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = properties->unitMaxHorizontalSpeed;
 
         double evaluationValue = simulation(arena, 1, unitIndex);
 
         if (evaluationValue > maxEvaluationValue) {
             maxEvaluationValue = evaluationValue;
-            bestAction = action;
+            bestAction.jump = false;
+            bestAction.jumpDown = !bestAction.jump;
+            bestAction.velocity = properties->unitMaxHorizontalSpeed;
         }
 
-        action.velocity = -properties.unitMaxHorizontalSpeed;
-        arena.units[unitIndex].setAction(action);
+        actions[unitId].jump = true;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = properties->unitMaxHorizontalSpeed;
 
         evaluationValue = simulation(arena, 1, unitIndex);
 
         if (evaluationValue > maxEvaluationValue) {
             maxEvaluationValue = evaluationValue;
-            bestAction = action;
+            bestAction.jump = true;
+            bestAction.jumpDown = !bestAction.jump;
+            bestAction.velocity = properties->unitMaxHorizontalSpeed;
+        }
+
+        actions[unitId].jump = false;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = -properties->unitMaxHorizontalSpeed;
+
+        evaluationValue = simulation(arena, 1, unitIndex);
+
+        if (evaluationValue > maxEvaluationValue) {
+            maxEvaluationValue = evaluationValue;
+            bestAction.jump = false;
+            bestAction.jumpDown = !bestAction.jump;
+            bestAction.velocity = -properties->unitMaxHorizontalSpeed;
+        }
+
+        actions[unitId].jump = true;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = -properties->unitMaxHorizontalSpeed;
+
+        evaluationValue = simulation(arena, 1, unitIndex);
+
+        if (evaluationValue > maxEvaluationValue) {
+            maxEvaluationValue = evaluationValue;
+            bestAction.jump = true;
+            bestAction.jumpDown = !bestAction.jump;
+            bestAction.velocity = -properties->unitMaxHorizontalSpeed;
         }
     }
-
-    cout << "Best action " << bestAction.toString() << endl;
 
     return bestAction;
 }
 
 double MyStrategy::simulation(Arena arena, int deep, int unitIndex) {
 
+    int unitId = arena.units[unitIndex].id;
 
     for (int i = 0; i < Consts::simulationTicks; ++i) {
-        arena.tick();
+        arena.tick(actions);
     }
 
     if (deep >= Consts::maxSimulationDeep) {
-        return evaluation(arena.units.front(), Game::getInstance());
+        return evaluation(arena.units.front(), deep * Consts::simulationTicks);
     }
 
     bool canJump = arena.units[unitIndex].jumpState.canJump;
     bool canCancel = arena.units[unitIndex].jumpState.canCancel;
 
-    UnitAction action;
-    action.shoot = false;
+    double evaluationValue = evaluation(arena.units.front(), deep * Consts::simulationTicks);
 
-    action.jump = false;
-    action.jumpDown = !action.jump;
-    action.aim = ZERO_VEC_2_DOUBLE;
-    action.reload = false;
-    action.swapWeapon = false;
-    action.plantMine = false;
-
-    double evaluationValue = 0;
     int simulationCount = 0;
 
     if (canJump) {
-        action.jump = true;
-        action.jumpDown = !action.jump;
-        action.velocity = properties.unitMaxHorizontalSpeed;
-        arena.units[unitIndex].setAction(action);
+        actions[unitId].jump = true;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = properties->unitMaxHorizontalSpeed;
 
         evaluationValue = max(evaluationValue, simulation(arena, deep + 1, unitIndex));
 
-        action.velocity = -properties.unitMaxHorizontalSpeed;
-        arena.units[unitIndex].setAction(action);
+        actions[unitId].jump = true;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = -properties->unitMaxHorizontalSpeed;
 
         evaluationValue = max(evaluationValue, simulation(arena, deep + 1, unitIndex));
         simulationCount += 2;
     }
 
     if (canCancel) {
-        action.jump = false;
-        action.jumpDown = !action.jump;
-
-        action.velocity = properties.unitMaxHorizontalSpeed;
-        arena.units[unitIndex].setAction(action);
+        actions[unitId].jump = false;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = properties->unitMaxHorizontalSpeed;
 
         evaluationValue = max(evaluationValue, simulation(arena, deep + 1, unitIndex));
 
-        action.velocity = -properties.unitMaxHorizontalSpeed;
-        arena.units[unitIndex].setAction(action);
+        actions[unitId].jump = false;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = -properties->unitMaxHorizontalSpeed;
 
         evaluationValue = max(evaluationValue, simulation(arena, deep + 1, unitIndex));
         simulationCount += 2;
@@ -266,16 +306,28 @@ double MyStrategy::simulation(Arena arena, int deep, int unitIndex) {
 
 
     if (!canJump and !canCancel) {
-        action.jump = false;
-        action.jumpDown = !action.jump;
-
-        action.velocity = properties.unitMaxHorizontalSpeed;
-        arena.units[unitIndex].setAction(action);
+        actions[unitId].jump = false;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = properties->unitMaxHorizontalSpeed;
 
         evaluationValue = max(evaluationValue, simulation(arena, deep + 1, unitIndex));
 
-        action.velocity = -properties.unitMaxHorizontalSpeed;
-        arena.units[unitIndex].setAction(action);
+
+        actions[unitId].jump = true;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = properties->unitMaxHorizontalSpeed;
+
+        evaluationValue = max(evaluationValue, simulation(arena, deep + 1, unitIndex));
+
+        actions[unitId].jump = false;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = -properties->unitMaxHorizontalSpeed;
+
+        evaluationValue = max(evaluationValue, simulation(arena, deep + 1, unitIndex));
+
+        actions[unitId].jump = false;
+        actions[unitId].jumpDown = !actions[unitId].jump;
+        actions[unitId].velocity = -properties->unitMaxHorizontalSpeed;
 
         evaluationValue = max(evaluationValue, simulation(arena, deep + 1, unitIndex));
         simulationCount += 2;
@@ -297,20 +349,6 @@ void MyStrategy::shootLogic(UnitAction &action, const Unit &unit, const Game &ga
         }
     }
 
-    const LootBox *nearestWeapon = nullptr;
-
-    for (const LootBox &lootBox : game.lootBoxes) {
-        if (std::dynamic_pointer_cast<Item::Weapon>(lootBox.item)) {
-            if (nearestWeapon == nullptr ||
-                unit.position.distSqr(lootBox.position) < unit.position.distSqr(nearestWeapon->position)) {
-                nearestWeapon = &lootBox;
-            }
-        }
-    }
-
-    if (unit.weapon == nullptr && nearestWeapon != nullptr) {
-        action.velocity = sgn(nearestWeapon->position.x - unit.position.x) * game.properties.unitMaxHorizontalSpeed;
-    }
 
     Vec2Double aim = Vec2Double(0, 0);
 
@@ -330,27 +368,24 @@ void MyStrategy::shootLogic(UnitAction &action, const Unit &unit, const Game &ga
             Vec2Double lowLine = aim.rotate(unit.weapon.get()->spread);
             Vec2Double topLine = aim.rotate(-unit.weapon.get()->spread);
 
-            auto lowLineCross = game.level.crossWall(unitCenter, unitCenter + lowLine);
-            auto topLineCross = game.level.crossWall(unitCenter, unitCenter + topLine);
+            auto lowLineCross = game.level.crossMiDistanceWall(unitCenter, unitCenter + lowLine);
+            auto topLineCross = game.level.crossMiDistanceWall(unitCenter, unitCenter + topLine);
 
-            if (lowLineCross) {
-                action.shoot = (lowLineCross.value() - enemyCenter).sqrLen() < (lowLineCross.value() - unitCenter).sqrLen();
-            }
-
-            if (topLineCross) {
-                action.shoot = (topLineCross.value() - enemyCenter).sqrLen() < (topLineCross.value() - unitCenter).sqrLen();
-            }
-
+            action.shoot = (lowLineCross ? (lowLineCross.value() - enemyCenter).sqrLen() < (lowLineCross.value() - unitCenter).sqrLen() : true)
+                    and
+                    (topLineCross ? (topLineCross.value() - enemyCenter).sqrLen() < (topLineCross.value() - unitCenter).sqrLen() : true);
         }
     }
 
     action.aim = aim;
 }
 
-double MyStrategy::evaluation(const Unit &unit, Game &game) {
-    Unit * enemy = game.playerUnits[enemyPlayerId].front();
+double MyStrategy::evaluation(const Unit &unit, int tick) {
 
-    double distanceFactor = 1.0 / (enemy->position - unit.position).len();
+    Unit * enemy = Game::getPlayerUnits(enemyPlayerId).front();
 
-    return unit.health + (unit.health - enemy->health >= 0 ? 1 : -1) * distanceFactor;
+    double distance = (enemy->position - unit.position).len();
+    double distanceFactor = 1.0 / distance;
+
+    return (unit.health + (unit.health - enemy->health >= 0 and distance > 3 ? 1 : -1) * distanceFactor + 100 * (unit.weapon != nullptr)) / (double)tick;
 }

@@ -1,46 +1,138 @@
 #include "Game.hpp"
 
+unique_ptr<Game> Game::game;
+
 Game::Game() { }
 
-Game::Game(int currentTick, Properties properties, Level level, std::vector<Player> players, std::vector<Unit> units, std::vector<Bullet> bullets, std::vector<Mine> mines, std::vector<LootBox> lootBoxes) : currentTick(currentTick), properties(properties), level(level), players(players), units(units), bullets(bullets), mines(mines), lootBoxes(lootBoxes) { }
+Game::Game(
+        int currentTick,
+        Properties properties,
+        Level level,
+        std::vector<Player> players,
+        std::vector<Unit> units,
+        std::vector<Bullet> bullets,
+        std::vector<Mine> mines
+        ) : currentTick(currentTick), properties(properties), level(level), players(players), units(units), bullets(bullets), mines(mines){ }
 
-Game * Game::readFrom(InputStream& stream) {
-    static Game & result = Game::getInstance();
 
-    result.currentTick = stream.readInt();
+Game * Game::init(InputStream &stream) {
+    game = make_unique<Game>(Game());
+    
+    game->currentTick = stream.readInt();
 
-    //@TODO optimize it
-    result.properties = Properties::readFrom(stream);
-    result.level = Level::readFrom(stream);
+    game->properties = Properties::readFrom(stream);
+    game->level = Level::readFrom(stream);
 
-    result.players = std::vector<Player>(stream.readInt());
-    result.playerUnits = map<int, vector<Unit*>>();
+    game->level.width = game->level.tiles.size();
+    game->level.height = game->level.tiles[0].size();
 
-    for (size_t i = 0; i < result.players.size(); i++) {
-        result.players[i] = Player::readFrom(stream);
-        result.playerUnits[result.players[i].id] = vector<Unit*>();
+    game->level.buildWalls();
+    game->level.buildStandablePlaces();
+
+    game->players = std::vector<Player>(stream.readInt());
+    game->playerUnits = map<int, vector<Unit*>>();
+
+    for (size_t i = 0; i < game->players.size(); i++) {
+        game->players[i] = Player::readFrom(stream);
+        game->playerUnits[game->players[i].id] = vector<Unit*>();
     }
-    result.units = std::vector<Unit>(stream.readInt());
+    game->units = std::vector<Unit>(stream.readInt());
 
-    for (size_t i = 0; i < result.units.size(); i++) {
-        result.units[i] = Unit::readFrom(stream, result.level);
-        result.playerUnits[result.units[i].playerId].push_back(&result.units[i]);
+    for (size_t i = 0; i < game->units.size(); i++) {
+        game->units[i] = Unit::readFrom(stream, &game->properties, &game->level);
+        game->playerUnits[game->units[i].playerId].push_back(&game->units[i]);
     }
-    result.bullets = std::vector<Bullet>(stream.readInt());
-    for (size_t i = 0; i < result.bullets.size(); i++) {
-        result.bullets[i] = Bullet::readFrom(stream);
+    game->bullets = std::vector<Bullet>(stream.readInt());
+    for (size_t i = 0; i < game->bullets.size(); i++) {
+        game->bullets[i] = Bullet::readFrom(stream);
     }
-    result.mines = std::vector<Mine>(stream.readInt());
-    for (size_t i = 0; i < result.mines.size(); i++) {
-        result.mines[i] = Mine::readFrom(stream);
+    game->mines = std::vector<Mine>(stream.readInt());
+    for (size_t i = 0; i < game->mines.size(); i++) {
+        game->mines[i] = Mine::readFrom(stream);
     }
-    result.lootBoxes = std::vector<LootBox>(stream.readInt());
-    for (size_t i = 0; i < result.lootBoxes.size(); i++) {
-        result.lootBoxes[i] = LootBox::readFrom(stream);
+    std::vector<LootBox> lootBoxes = std::vector<LootBox>(stream.readInt());
+
+    game->lootHealthPacks = vector<LootBox>();
+    game->lootWeapons = vector<LootBox>();
+    game->lootMines = vector<LootBox>();
+
+    for (size_t i = 0; i < lootBoxes.size(); i++) {
+        lootBoxes[i] = LootBox::readFrom(stream);
+
+        switch (lootBoxes[i].item.get()->getType()) {
+            case ItemType ::ItemHealthPack:
+                game->lootHealthPacks.push_back(lootBoxes[i]);
+                break;
+            case ItemType ::ItemWeapon:
+                game->lootWeapons.push_back(lootBoxes[i]);
+                break;
+            case ItemType ::ItemMine:
+                game->lootMines.push_back(lootBoxes[i]);
+                break;
+        }
     }
 
-    return &result;
+    return Game::game.get();
 }
+
+
+//@TODO optimize it
+Game * Game::updateTick(InputStream &stream) {
+    game->currentTick = stream.readInt();
+
+    Properties::readFrom(stream);
+    Level::readFrom(stream);
+
+    game->players = std::vector<Player>(stream.readInt());
+    game->playerUnits = map<int, vector<Unit*>>();
+
+    for (size_t i = 0; i < game->players.size(); i++) {
+        game->players[i] = Player::readFrom(stream);
+        game->playerUnits[game->players[i].id] = vector<Unit*>();
+    }
+    game->units = std::vector<Unit>(stream.readInt());
+
+    for (size_t i = 0; i < game->units.size(); i++) {
+        game->units[i] = Unit::readFrom(stream, &game->properties, &game->level);
+        game->playerUnits[game->units[i].playerId].push_back(&game->units[i]);
+    }
+    game->bullets = std::vector<Bullet>(stream.readInt());
+    for (size_t i = 0; i < game->bullets.size(); i++) {
+        game->bullets[i] = Bullet::readFrom(stream);
+    }
+    game->mines = std::vector<Mine>(stream.readInt());
+    for (size_t i = 0; i < game->mines.size(); i++) {
+        game->mines[i] = Mine::readFrom(stream);
+    }
+    std::vector<LootBox> lootBoxes = std::vector<LootBox>(stream.readInt());
+
+    game->lootHealthPacks = vector<LootBox>();
+    game->lootWeapons = vector<LootBox>();
+    game->lootMines = vector<LootBox>();
+
+    for (size_t i = 0; i < lootBoxes.size(); i++) {
+        lootBoxes[i] = LootBox::readFrom(stream);
+
+        switch (lootBoxes[i].item.get()->getType()) {
+            case ItemType ::ItemHealthPack:
+                game->lootHealthPacks.push_back(lootBoxes[i]);
+                break;
+            case ItemType ::ItemWeapon:
+                game->lootWeapons.push_back(lootBoxes[i]);
+                break;
+            case ItemType ::ItemMine:
+                game->lootMines.push_back(lootBoxes[i]);
+                break;
+        }
+    }
+
+    return Game::game.get();
+}
+
+vector<Unit*>& Game::getPlayerUnits(int playerId) {
+    return Game::game->playerUnits[playerId];
+}
+
 void Game::writeTo(OutputStream& stream) const {
     stream.write(currentTick);
     properties.writeTo(stream);
@@ -61,8 +153,17 @@ void Game::writeTo(OutputStream& stream) const {
     for (const Mine& minesElement : mines) {
         minesElement.writeTo(stream);
     }
-    stream.write((int)(lootBoxes.size()));
-    for (const LootBox& lootBoxesElement : lootBoxes) {
+    stream.write((int)(lootHealthPacks.size() + lootMines.size() + lootWeapons.size()));
+
+    for (const LootBox& lootBoxesElement : lootHealthPacks) {
+        lootBoxesElement.writeTo(stream);
+    }
+
+    for (const LootBox& lootBoxesElement : lootMines) {
+        lootBoxesElement.writeTo(stream);
+    }
+
+    for (const LootBox& lootBoxesElement : lootWeapons) {
         lootBoxesElement.writeTo(stream);
     }
 }
@@ -79,8 +180,10 @@ std::string Game::toString() const {
         ")";
 }
 
+Properties *Game::getProperties() {
+    return &Game::game->properties;
+}
 
-Game& Game::getInstance() {
-    static Game game;
-    return game;
+Level* Game::getLevel() {
+    return &Game::game->level;
 }

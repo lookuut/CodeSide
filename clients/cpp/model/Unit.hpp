@@ -19,6 +19,7 @@
 #include "Properties.hpp"
 #include <list>
 #include "Bullet.hpp"
+#include "LootBox.hpp"
 
 
 using namespace std;
@@ -28,21 +29,24 @@ class Unit {
 private:
     void updateTilePos();
 
-public:
+    Properties * properties;
+    Level * level;
 
-    UnitAction action;
+public:
 
     int playerId;
     int id;
     int health;
+    double widthHalf;
 
-    Level level;
     Vec2Double position;
+    Vec2Double prevPosition;
+
+    Vec2Double leftTop;
+    Vec2Double rightDown;
 
     int posTileX;
     int posTileY;
-
-    int centerPosTileY;
 
     int leftPosTileX;
     int rightPosTileX;
@@ -62,7 +66,6 @@ public:
     bool onLadder;
     int mines;
     std::shared_ptr<Weapon> weapon;
-    list<UnitAction> actions;
 
     Unit();
     Unit(
@@ -83,7 +86,7 @@ public:
 
     bool equal(const Unit &unit, double eps) const;
 
-    static Unit readFrom(InputStream& stream, const Level &level);
+    static Unit readFrom(InputStream& stream, Properties * properties, Level *level);
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
 
@@ -91,7 +94,6 @@ public:
     void updateMoveState();
 
     void jumping(double velocity, double time);
-    void laddering(double vel);
     void downing(double vel);
 
     bool isOnLadder();
@@ -100,7 +102,7 @@ public:
     bool isInGround();
     bool isOnPlatform();
     bool isOnJumpPad();
-    bool isHeatRoof();
+    void heatRoofRoutine();
 
     void horizontalWallCollision(double velocity);
     void verticalWallCollision();
@@ -114,8 +116,12 @@ public:
     bool isInside(const Vec2Double &point)const;
     bool isOverlap(const Bullet & bullet) const;
 
-    UnitAction & getAction();
-    void setAction(UnitAction & action);
+    bool picUpkHealthPack(const LootBox &lootbox);
+    bool pickUpWeapon(const LootBox &lootbox);
+    bool picUpkMine(const LootBox &lootbox);
+
+    bool isPickUpLootbox(const LootBox &lootbox);
 };
+
 
 #endif

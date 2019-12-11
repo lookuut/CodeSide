@@ -14,6 +14,9 @@
 
 class LootBox {
 public:
+
+    Vec2Double leftTop;
+    Vec2Double rightDown;
     Vec2Double position;
     Vec2Double size;
     std::shared_ptr<Item> item;

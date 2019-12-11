@@ -9,6 +9,7 @@
 #include <optional>
 #include <map>
 #include "Tile.hpp"
+#include "../Debug.hpp"
 
 using namespace std;
 
@@ -23,10 +24,14 @@ public:
 
     Level();
     Level(std::vector<std::vector<Tile>> tiles);
+
     static Level readFrom(InputStream& stream);
+
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
     optional<Vec2Float> crossWall(const Vec2Float & p1, const Vec2Float & p2) const;
+    optional<Vec2Float> crossMiDistanceWall(const Vec2Float & p1, const Vec2Float & p2) const;
+
 
     void buildWalls();
     void buildStandablePlaces();

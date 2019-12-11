@@ -100,9 +100,13 @@
 class ServerMessageGame {
 public:
     std::shared_ptr<PlayerView> playerView;
+
     ServerMessageGame();
     ServerMessageGame(std::shared_ptr<PlayerView> playerView);
-    static ServerMessageGame readFrom(InputStream& stream);
+
+    static ServerMessageGame init(InputStream &stream);
+    static ServerMessageGame updateTick(InputStream &stream);
+
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
 };

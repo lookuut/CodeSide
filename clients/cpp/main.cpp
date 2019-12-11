@@ -17,10 +17,38 @@ public:
     outputStream->flush();
   }
   void run() {
-    MyStrategy myStrategy;
+
     Debug debug(outputStream);
+
+    auto message = ServerMessageGame::init(*inputStream);
+    const auto& playerView = message.playerView;
+
+    if (!playerView) {
+      return;
+    }
+
+    int enemyPlayerId;
+    for (const Player & player : playerView.get()->game->players) {
+        if (player.id != playerView->myId) {
+            enemyPlayerId = player.id;
+        }
+    }
+
+    MyStrategy myStrategy(&playerView.get()->game->properties, &playerView.get()->game->level, playerView.get()->myId, enemyPlayerId, playerView->game->units);
+
+    std::unordered_map<int, UnitAction> actions;
+    for (const Unit &unit : playerView->game->units) {
+      if (unit.playerId == playerView->myId) {
+        actions.emplace(std::make_pair(
+                unit.id,
+                myStrategy.getAction(unit, *playerView->game, debug)));
+      }
+    }
+    PlayerMessageGame::ActionMessage(Versioned(actions)).writeTo(*outputStream);
+    outputStream->flush();
+
     while (true) {
-      auto message = ServerMessageGame::readFrom(*inputStream);
+      auto message = ServerMessageGame::updateTick(*inputStream);
       const auto& playerView = message.playerView;
       if (!playerView) {
         break;

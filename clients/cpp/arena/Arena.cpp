@@ -3,6 +3,8 @@
 //
 
 #include "Arena.hpp"
+#include <chrono>
+#include <ctime>
 
 #include <iostream>
 using namespace std;
@@ -11,50 +13,29 @@ template <typename T> int sgn(T val) {
     return (T(0) < val) - (val < T(0));
 }
 
-Arena::Arena() {}
+Arena::Arena(Properties * properties, Level * level): properties(properties), level(level) {
+    microTicksPerSecond = 1.0 / (properties->ticksPerSecond * Consts::microticks);
+}
 
 
-Arena::Arena(
-        const Properties &properties,
-        const Level &level,
-        const std::vector<Player> &players,
+void Arena::update(
         const std::vector<Unit> &units,
         const std::vector<Bullet> &bullets,
         const std::vector<Mine> &mines,
-        const std::vector<LootBox> &lootBoxes
-) : properties(properties), level(level), players(players), units(units), bullets(bullets),
-    mines(mines), lootBoxes(lootBoxes) {
-    microTicksPerSecond = 1.0 / (properties.ticksPerSecond * microticks);
+        const std::vector<LootBox> &lootHealthPacks,
+        const std::vector<LootBox> &lootWeapons,
+        const std::vector<LootBox> &lootMines
+) {
+    this->units = units;
+    this->bullets = bullets;
+    this->mines = mines;
+    this->lootHealthPacks = lootHealthPacks;
+    this->lootWeapons = lootWeapons;
+    this->lootMines = lootMines;
 }
 
 
 void Arena::bulletMicrotick() {
-
-    /*for (Unit & unit : units) {
-        UnitAction action = unit.actions.front();
-
-        Weapon * currentWeapon = unit.weapon.get();
-
-        if (action.shoot and currentWeapon != nullptr and currentWeapon->lastFireTick != nullptr and action.aim != ZERO_VEC_2_DOUBLE) {//can shoot
-
-            action.aim.normalize() *= currentWeapon->params.bullet.speed;
-
-            Bullet bullet = Bullet(
-                    currentWeapon->type,
-                    unit.id,
-                    unit.playerId,
-                    Vec2Double(unit.position.x, unit.position.y + unit.size.y / 2.0),
-                    action.aim,
-                    currentWeapon->params.bullet.damage,
-                    currentWeapon->params.bullet.size,
-                    currentWeapon->params.explosion
-            );
-
-            bullets.push_back(bullet);
-
-    }
-
-    }*/
 
     auto it = bullets.begin();
     while (it != bullets.end()) {
@@ -134,7 +115,7 @@ void Arena::bulletWallOverlap() {
         int xr = (int)(bullet.position.x + bullet.size / 2.0);
         int yt = (int)(bullet.position.y + bullet.size / 2.0);
 
-        if (level.tiles[xl][yd] == Tile::WALL or level.tiles[xr][yd] == Tile::WALL or level.tiles[xl][yt] == Tile::WALL or level.tiles[xr][yt] == Tile::WALL) {
+        if (level->tiles[xl][yd] == Tile::WALL or level->tiles[xr][yd] == Tile::WALL or level->tiles[xl][yt] == Tile::WALL or level->tiles[xr][yt] == Tile::WALL) {
             if (bullet.weaponType == WeaponType::ROCKET_LAUNCHER) {
                 bullet.explossion(units);
             }
@@ -147,92 +128,130 @@ void Arena::bulletWallOverlap() {
 
 void Arena::pickUpLoots(Unit & unit) {//@TODO how it works?
 
-    auto it = lootBoxes.begin();
-
-    while (it != lootBoxes.end()) {
-        LootBox & lootBox = *it;
-
-        if (std::dynamic_pointer_cast<Item::HealthPack>(lootBox.item) and unit.health < Properties::getProperty().unitMaxHealth) {
-            if (unit.position.x - unit.size.x / 2.0 <= lootBox.position.x and lootBox.position.x <= unit.position.x + unit.size.x / 2.0
-                and
-                unit.position.y <= lootBox.position.y + lootBox.size.y / 2.0 and unit.position.y + unit.size.y >= lootBox.position.y + lootBox.size.y
-                    ) {
-                unit.health += Properties::getProperty().healthPackHealth;
-                it = lootBoxes.erase(it);
-                cout << "pick up loot" << endl;
-                continue;
-            }
+    for (auto it = lootHealthPacks.begin(); it != lootHealthPacks.end(); ) {
+        if (unit.picUpkHealthPack(*it)) {
+            it = lootHealthPacks.erase(it);
+        } else {
+            ++it;
         }
+    }
 
-        ++it;
+    for (auto it = lootWeapons.begin(); it != lootWeapons.end(); ) {
+        if (unit.pickUpWeapon(*it)) {
+            it = lootWeapons.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    for (auto it = lootMines.begin(); it != lootMines.end(); ) {
+        if (unit.picUpkMine(*it)) {
+            it = lootMines.erase(it);
+        } else {
+            ++it;
+        }
     }
 }
 
 
-void Arena::tick() {
+void Arena::tick(const vector<UnitAction> & actions) {
 
+    /*for (int ii = 0; ii < 100; ++ii) {
 
-    for (int i = 0; i < microticks; ++i) {
+        chrono::system_clock::time_point start = chrono::system_clock::now();
 
-        bulletMicrotick();
+        for (int j = 0; j < 10000; ++j) {
+    */        for (Unit &unit : units) {
+                const UnitAction &action = actions[unit.id];
+                double horSpeed = sgn(action.velocity) * min(abs(action.velocity), properties->unitMaxHorizontalSpeed);
 
-        for (Unit & unit : units) {
+                for (int i = 0; i < Consts::microticks; ++i) {
 
-            UnitAction action = unit.getAction();
+                    bulletMicrotick();
 
-            double horSpeed = sgn(action.velocity) * min(abs(action.velocity), properties.unitMaxHorizontalSpeed);
+                    unit.prevPosition = unit.position;
 
-            unit.moveHor(horSpeed  * microTicksPerSecond);
+                    unit.moveHor(horSpeed * microTicksPerSecond);
+                    unit.horizontalWallCollision(horSpeed);
 
-            unit.horizontalWallCollision(horSpeed);
+                    if (unit.jumpState.canJump and unit.jumpState.canCancel) {//Jumping
+                        if (action.jump) {
+                            unit.jumping(unit.jumpState.speed * microTicksPerSecond, microTicksPerSecond);
+                        }
+                    }
 
-            if (unit.jumpState.canJump) {//Jumping
-                if (action.jump) {
-                    unit.jumping(unit.jumpState.speed * microTicksPerSecond, microTicksPerSecond);
+                    if (!unit.jumpState.canJump and unit.jumpState.maxTime <= .0) {//Down
+                        unit.downing(properties->unitFallSpeed * microTicksPerSecond);
+                    }
+
+                    if (unit.jumpState.canCancel) {//Down
+                        if (!action.jump) {
+                            unit.downing(properties->unitFallSpeed * microTicksPerSecond);
+                            unit.applyJumpCancel();
+                        }
+                    } else if (unit.jumpState.maxTime > 0) {
+                        unit.jumping(unit.jumpState.speed * microTicksPerSecond, microTicksPerSecond);
+                    }
+
+                    unit.heatRoofRoutine();
+
+                    if (unit.jumpState.maxTime <= .0) {
+                        unit.applyJumpCancel();
+                    }
+
+                    if (unit.isOnWall() or (unit.isOnPlatform() and !unit.jumpState.canJump and !action.jumpDown)) {
+                        unit.verticalWallCollision();
+                    }
+
+                    if (unit.onLadder) {
+                        unit.applyOnGround();
+                    }
+
+                    if (unit.isOnJumpPad()) {
+                        unit.applyJumpPad(properties->jumpPadJumpSpeed, properties->jumpPadJumpTime);
+                    }
+
+                    bulletOverlapWithUnit(unit);
+
+                    pickUpLoots(unit);
+
+                    unit.prevPosition = unit.position;
+
+                    bulletWallOverlap();
                 }
             }
 
-            if (!unit.jumpState.canJump and unit.jumpState.maxTime <= .0) {//Down
-                unit.downing(properties.unitFallSpeed * microTicksPerSecond);
-            }
+            ++currentTick;
+        /*}
 
-            if (unit.jumpState.canCancel /*and unit.onGround*/) {//Down
-                if (!action.jump) {
-                    unit.downing(properties.unitFallSpeed * microTicksPerSecond);
-                    unit.applyJumpCancel();
-                }
-            } else if (unit.jumpState.maxTime > 0) {
-                unit.jumping(unit.jumpState.speed * microTicksPerSecond, microTicksPerSecond);
-            }
+        chrono::system_clock::time_point end = chrono::system_clock::now();
+        long micros = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        cout << micros << endl;
+    }*/
+}
 
-            if (unit.isHeatRoof()) {
-                unit.applyJumpCancel();
-                unit.position.y = unit.topTileY - unit.size.y;
-                unit.downing(properties.unitFallSpeed * microTicksPerSecond);
-            }
+/*for (Unit & unit : units) {
+        UnitAction action = unit.actions.front();
 
-            if (unit.jumpState.maxTime <= .0) {
-                unit.applyJumpCancel();
-            }
+        Weapon * currentWeapon = unit.weapon.get();
 
-            if (unit.isOnWall() or (unit.isOnPlatform() and !unit.jumpState.canJump and !action.jumpDown)) {
-                unit.verticalWallCollision();
-            }
+        if (action.shoot and currentWeapon != nullptr and currentWeapon->lastFireTick != nullptr and action.aim != ZERO_VEC_2_DOUBLE) {//can shoot
 
-            if (unit.onLadder) {
-                unit.applyOnGround();
-            }
+            action.aim.normalize() *= currentWeapon->params.bullet.speed;
 
-            if (unit.isOnJumpPad()) {
-                unit.applyJumpPad(properties.jumpPadJumpSpeed, properties.jumpPadJumpTime);
-            }
+            Bullet bullet = Bullet(
+                    currentWeapon->type,
+                    unit.id,
+                    unit.playerId,
+                    Vec2Double(unit.position.x, unit.position.y + unit.size.y / 2.0),
+                    action.aim,
+                    currentWeapon->params.bullet.damage,
+                    currentWeapon->params.bullet.size,
+                    currentWeapon->params.explosion
+            );
 
-            bulletOverlapWithUnit(unit);
-            pickUpLoots(unit);
-        }
+            bullets.push_back(bullet);
 
-        bulletWallOverlap();
     }
 
-    ++currentTick;
-}
+    }*/

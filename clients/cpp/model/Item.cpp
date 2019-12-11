@@ -3,6 +3,7 @@
 
 Item::HealthPack::HealthPack() { }
 Item::HealthPack::HealthPack(int health) : health(health) { }
+
 Item::HealthPack Item::HealthPack::readFrom(InputStream& stream) {
     Item::HealthPack result;
     result.health = stream.readInt();
@@ -18,6 +19,12 @@ std::string Item::HealthPack::toString() const {
         ")";
 }
 
+ItemType Item::HealthPack::getType() const {
+    return ItemType::ItemHealthPack;
+}
+
+
+/*********************Weapon*******************/
 Item::Weapon::Weapon() { }
 Item::Weapon::Weapon(WeaponType weaponType) : weaponType(weaponType) { }
 Item::Weapon Item::Weapon::readFrom(InputStream& stream) {
@@ -47,6 +54,12 @@ std::string Item::Weapon::toString() const {
         ")";
 }
 
+ItemType Item::Weapon::getType() const {
+    return ItemType::ItemWeapon;
+}
+
+/*********************Mine*******************/
+
 Item::Mine::Mine() { }
 Item::Mine Item::Mine::readFrom(InputStream& stream) {
     Item::Mine result;
@@ -71,3 +84,7 @@ std::shared_ptr<Item> Item::readFrom(InputStream& stream) {
         throw std::runtime_error("Unexpected discriminant value");
     }
 };
+
+ItemType Item::Mine::getType() const {
+    return ItemType ::ItemMine;
+}

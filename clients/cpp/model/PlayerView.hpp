@@ -100,7 +100,10 @@ public:
     Game * game;
     PlayerView();
     PlayerView(int myId, Game * game);
-    static PlayerView readFrom(InputStream& stream);
+
+    static PlayerView init(InputStream &stream);
+    static PlayerView updateTick(InputStream &stream);
+
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
 };

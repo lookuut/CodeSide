@@ -12,12 +12,19 @@ class MyStrategy {
 private:
 
     Arena arena;
-    Properties properties;
+
     int unitIndex;
     int enemyPlayerId;
     int allyPlayerId;
+    Vec2Double nearestWeaponPos;
+
+    Level * level;
+    Properties * properties;
+
+    vector<UnitAction> actions;
 public:
-  MyStrategy();
+  MyStrategy(Properties * properties, Level * level, int playerId, int enemyPlayerId, const vector<Unit> & units);
+
   UnitAction getAction(const Unit &unit, const Game &game, Debug &debug);
 
   UnitAction simulationTest(const Unit &unit, const Game &game, Debug &debug);
@@ -28,7 +35,7 @@ public:
 
   UnitAction bestAction();
 
-  double evaluation(const Unit & unit, Game & game);
+  double evaluation(const Unit & unit, int tick);
 };
 
 #endif

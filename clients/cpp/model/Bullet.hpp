@@ -19,6 +19,10 @@ public:
     WeaponType weaponType;
     int unitId;
     int playerId;
+
+    Vec2Double leftTop;
+    Vec2Double rightDown;
+
     Vec2Double position;
     Vec2Double velocity;
     int damage;

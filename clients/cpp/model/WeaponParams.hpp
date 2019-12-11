@@ -12,7 +12,7 @@
 class WeaponParams {
 public:
     int magazineSize;
-    double fireRate;
+    double  fireRate;
     double reloadTime;
     double minSpread;
     double maxSpread;

@@ -5,8 +5,9 @@
 #include <memory>
 #include <string>
 #include <stdexcept>
-#include <stdexcept>
 #include "WeaponType.hpp"
+
+enum ItemType {ItemHealthPack, ItemWeapon, ItemMine};
 
 class Item {
 public:
@@ -17,6 +18,7 @@ public:
     static std::shared_ptr<Item> readFrom(InputStream& stream);
     virtual void writeTo(OutputStream& stream) const = 0;
     virtual std::string toString() const = 0;
+    virtual ItemType getType() const = 0;
 };
 
 class Item::HealthPack : public Item {
@@ -29,6 +31,7 @@ public:
     static HealthPack readFrom(InputStream& stream);
     void writeTo(OutputStream& stream) const;
     std::string toString() const override;
+    ItemType getType() const;
 };
 
 class Item::Weapon : public Item {
@@ -41,6 +44,7 @@ public:
     static Weapon readFrom(InputStream& stream);
     void writeTo(OutputStream& stream) const;
     std::string toString() const override;
+    ItemType getType() const;
 };
 
 class Item::Mine : public Item {
@@ -51,6 +55,7 @@ public:
     static Mine readFrom(InputStream& stream);
     void writeTo(OutputStream& stream) const;
     std::string toString() const override;
+    ItemType getType() const;
 };
 
 #endif

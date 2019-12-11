@@ -2,14 +2,25 @@
 
 PlayerView::PlayerView() { }
 PlayerView::PlayerView(int myId, Game * game) : myId(myId), game(game) { }
-PlayerView PlayerView::readFrom(InputStream& stream) {
+
+PlayerView PlayerView::init(InputStream &stream) {
     PlayerView result;
 
     result.myId = stream.readInt();
-    result.game = Game::readFrom(stream);
+    result.game = Game::init(stream);
 
     return result;
 }
+
+PlayerView PlayerView::updateTick(InputStream &stream) {
+    PlayerView result;
+
+    result.myId = stream.readInt();
+    result.game = Game::updateTick(stream);
+
+    return result;
+}
+
 void PlayerView::writeTo(OutputStream& stream) const {
     stream.write(myId);
     game->writeTo(stream);
