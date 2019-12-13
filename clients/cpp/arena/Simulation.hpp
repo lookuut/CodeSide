@@ -31,7 +31,7 @@
 #include <math.h>
 #include <vector>
 
-class Arena {
+class Simulation {
 private:
     int currentTick = 0;
     double microTicksPerSecond;
@@ -47,7 +47,7 @@ public:
     std::vector<LootBox> lootWeapons;
     std::vector<LootBox> lootMines;
 
-    Arena(Properties * properties, Level * level);
+    Simulation(Properties * properties, Level * level);
 
     void update(const std::vector<Unit> &units,
                 const std::vector<Bullet> &bullets,

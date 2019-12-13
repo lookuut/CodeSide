@@ -2,7 +2,7 @@
 // Created by lookuut on 29.11.19.
 //
 
-#include "Arena.hpp"
+#include "Simulation.hpp"
 #include "../utils/Geometry.h"
 #include <chrono>
 #include <ctime>
@@ -16,12 +16,12 @@ template <typename T> int sgn(T val) {
     return (T(0) < val) - (val < T(0));
 }
 
-Arena::Arena(Properties * properties, Level * level): properties(properties), level(level) {
+Simulation::Simulation(Properties * properties, Level * level): properties(properties), level(level) {
     microTicksPerSecond = 1.0 / (properties->ticksPerSecond * Consts::microticks);
 }
 
 
-void Arena::update(
+void Simulation::update(
         const std::vector<Unit> &units,
         const std::vector<Bullet> &bullets,
         const std::vector<Mine> &mines,
@@ -37,7 +37,7 @@ void Arena::update(
     this->lootMines = lootMines;
 }
 
-void Arena::mineMicrotick() {
+void Simulation::mineMicrotick() {
 
     for (int i = mines.size() - 1; i >= 0; --i) {
         Mine & mine = mines[i];
@@ -62,7 +62,7 @@ void Arena::mineMicrotick() {
     }
 }
 
-void Arena::bulletMicrotick() {
+void Simulation::bulletMicrotick() {
 
     auto it = bullets.begin();
     while (it != bullets.end()) {
@@ -92,7 +92,7 @@ void Arena::bulletMicrotick() {
     }
 }
 
-void Arena::bulletOverlapWithUnit(Unit &unit) {
+void Simulation::bulletOverlapWithUnit(Unit &unit) {
     auto it = bullets.begin();
 
     while (it != bullets.end()) {
@@ -134,7 +134,7 @@ void Arena::bulletOverlapWithUnit(Unit &unit) {
     }
 }
 
-void Arena::bulletWallOverlap() {
+void Simulation::bulletWallOverlap() {
     auto it = bullets.begin();
 
     while (it != bullets.end()) {
@@ -156,7 +156,7 @@ void Arena::bulletWallOverlap() {
     }
 }
 
-void Arena::bulletMineOverlap() {
+void Simulation::bulletMineOverlap() {
     auto it = bullets.begin();
 
     while (it != bullets.end()) {
@@ -181,7 +181,7 @@ void Arena::bulletMineOverlap() {
     }
 }
 
-void Arena::pickUpLoots(Unit & unit) {//@TODO how it works?
+void Simulation::pickUpLoots(Unit & unit) {//@TODO how it works?
 
     for (auto it = lootHealthPacks.begin(); it != lootHealthPacks.end(); ) {
         if (unit.picUpkHealthPack(*it)) {
@@ -208,7 +208,7 @@ void Arena::pickUpLoots(Unit & unit) {//@TODO how it works?
     }
 }
 
-void Arena::shootAction(Unit &unit, const Vec2Double & aim) {
+void Simulation::shootAction(Unit &unit, const Vec2Double & aim) {
 
     if (unit.weapon != nullptr and aim != ZERO_VEC_2_DOUBLE) {
         Weapon * weapon = unit.weapon.get();
@@ -251,7 +251,7 @@ void Arena::shootAction(Unit &unit, const Vec2Double & aim) {
     }
 }
 
-void Arena::mineActicate(const Unit &unit) {
+void Simulation::mineActicate(const Unit &unit) {
 
     for (Mine & mine : mines) {
         if (mine.state == MineState::IDLE and Geometry::isRectOverlap(unit.leftTop, unit.rightDown, mine.activateLeftTopAngle, mine.activateRightDownAngle)) {
@@ -261,7 +261,7 @@ void Arena::mineActicate(const Unit &unit) {
     }
 }
 
-void Arena::tick(const vector<UnitAction> & actions) {
+void Simulation::tick(const vector<UnitAction> & actions) {
 
     /*for (int ii = 0; ii < 100; ++ii) {
 

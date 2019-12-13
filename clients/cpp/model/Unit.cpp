@@ -1,5 +1,5 @@
 #include "Unit.hpp"
-#include "../arena/Arena.hpp"
+#include "../arena/Simulation.hpp"
 #include "../utils/Geometry.h"
 #include "../Consts.h"
 #include <iostream>

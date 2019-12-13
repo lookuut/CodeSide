@@ -6,23 +6,25 @@
 #include "model/Game.hpp"
 #include "model/Unit.hpp"
 #include "model/UnitAction.hpp"
-#include "arena/Arena.hpp"
+#include "arena/Simulation.hpp"
+#include "arena/MinMax.h"
 
 class MyStrategy {
 private:
 
-    Arena arena;
+    Simulation arena;
 
-    int unitIndex;
     int enemyPlayerId;
     int allyPlayerId;
     vector<int> unitsIndex;
-    Vec2Double nearestWeaponPos;
 
     Level * level;
     Properties * properties;
 
     vector<UnitAction> actions;
+
+    MinMax minMax;
+
 public:
 
   MyStrategy(
@@ -38,14 +40,6 @@ public:
 
   UnitAction simulationTest(const Unit &unit, const Game &game, Debug &debug);
   bool simulationEqualTests(const Unit & simulatedUnit, const Unit & unit, const Game & game) const;
-
-  double simulation(Arena arena, int deep, int unitIndex);
-
-  void shootLogic(UnitAction & action, const Unit &unit, const Game &game, Debug &debug);
-
-  UnitAction bestAction();
-
-  double evaluation(const Unit & unit, int tick);
 };
 
 #endif

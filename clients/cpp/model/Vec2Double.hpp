@@ -32,12 +32,18 @@ public:
     bool operator==(const Vec2Double & vec) const;
     bool operator!=(const Vec2Double & vec) const;
 
+    double cross(const Vec2Double & vec) const;
+    double dot(const Vec2Double & vec) const;
+    double angle(const Vec2Double & vec) const;
+
     void operator*=(double f);
 
     double len() const;
     double sqrLen() const;
     Vec2Double& normalize();
     Vec2Double rotate(double angle) const;
+    Vec2Double getOpponentAngle(double size, bool isClockWise) const;
+
     Vec2Float toFloat();
 };
 

@@ -11,7 +11,7 @@ public:
     static constexpr double eps = 1.0e-9;
     static constexpr int simulationTicks = 10;
     static constexpr int maxSimulationDeep = 4;
-    static constexpr int microticks = 1;
+    static constexpr int microticks = 100;
     static constexpr double noLastAngleValue = -100.0;
     static constexpr int maxUnitCount = 4;
 };

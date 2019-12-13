@@ -75,6 +75,33 @@ Vec2Double Vec2Double::rotate(double angle) const{
     return Vec2Double(x * cos(angle) - y * sin(angle), y * cos(angle) + x * sin(angle));
 }
 
+double Vec2Double::cross(const Vec2Double &vec) const {
+    return x * vec.y - y * vec.x;
+}
+
+double Vec2Double::dot(const Vec2Double &vec) const {
+    return x * vec.x - y * vec.y;
+}
+
+double Vec2Double::angle(const Vec2Double &vec) const {
+    return atan2(this->cross(vec), this->dot(vec));
+}
+
+Vec2Double Vec2Double::getOpponentAngle(double size, bool isClockWise) const {
+
+    if (x >= 0 and y >= 0) {
+        return Vec2Double((isClockWise ? size: -size), (isClockWise ? -size: size));
+    } else if (x >= 0 and y < 0) {
+        return Vec2Double((isClockWise ? -size: size), (isClockWise ? -size: size));
+    } else if (x < 0 and y < 0) {
+        return Vec2Double((isClockWise ? -size: size), (isClockWise ? size: -size));
+    } else {
+        return Vec2Double((isClockWise ? size: -size), (isClockWise ? size: -size));
+    }
+}
+
 Vec2Float Vec2Double::toFloat() {
     return Vec2Float((float)x, (float)y);
 }
+
+
