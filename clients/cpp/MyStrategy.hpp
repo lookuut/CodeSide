@@ -16,6 +16,7 @@ private:
     int unitIndex;
     int enemyPlayerId;
     int allyPlayerId;
+    vector<int> unitsIndex;
     Vec2Double nearestWeaponPos;
 
     Level * level;
@@ -23,11 +24,20 @@ private:
 
     vector<UnitAction> actions;
 public:
-  MyStrategy(Properties * properties, Level * level, int playerId, int enemyPlayerId, const vector<Unit> & units);
+
+  MyStrategy(
+          Properties * properties,
+          Level * level,
+          int playerId,
+          int enemyPlayerId,
+          const vector<Unit> & units,
+          const vector<int> & unitsIndex
+          );
 
   UnitAction getAction(const Unit &unit, const Game &game, Debug &debug);
 
   UnitAction simulationTest(const Unit &unit, const Game &game, Debug &debug);
+  bool simulationEqualTests(const Unit & simulatedUnit, const Unit & unit, const Game & game) const;
 
   double simulation(Arena arena, int deep, int unitIndex);
 

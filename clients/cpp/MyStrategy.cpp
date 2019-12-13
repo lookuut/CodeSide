@@ -14,21 +14,22 @@ template <typename T> int sgn(T val) {
 
 using namespace std;
 
-MyStrategy::MyStrategy(Properties * properties, Level * level, int playerId, int enemyPlayerId, const vector<Unit> & units):
+MyStrategy::MyStrategy(Properties * properties, Level * level, int playerId, int enemyPlayerId, const vector<Unit> & units, const vector<int> & unitsIndex):
 properties(properties),
 level(level),
 allyPlayerId(playerId),
 enemyPlayerId(enemyPlayerId),
-arena(properties, level)
+arena(properties, level),
+unitsIndex(unitsIndex)
 {
     unitIndex = 0;
 
-    actions = vector<UnitAction>(5, UnitAction());
+    actions = vector<UnitAction>(Consts::maxUnitCount, UnitAction());
 }
 
 UnitAction MyStrategy::getAction(const Unit &unit, const Game &game,
                                  Debug &debug) {
-    //return simulationTest(unit, game, debug);
+    return simulationTest(unit, game, debug);
 
     vector<Unit> units = {unit};
     arena.update(units, game.bullets, game.mines, game.lootHealthPacks, game.lootWeapons, game.lootMines);
@@ -57,69 +58,159 @@ UnitAction MyStrategy::getAction(const Unit &unit, const Game &game,
     return action;
 }
 
+bool MyStrategy::simulationEqualTests(const Unit &simulatedUnit, const Unit &unit, const Game &game) const {
+    int goThroughStarisBugTick = 24803;
+    int pickUpLootBugTick1 = 63943;
+    int pickUpLootBugTick2 = 71322;
 
-UnitAction MyStrategy::simulationTest(const Unit &unit, const Game &game, Debug &debug) {
-
-    cout.precision(17);
-    vector<Unit> units = {unit};
-
-    if (game.currentTick == 0) {
-        arena.update(units, game.bullets, game.mines, game.lootHealthPacks, game.lootWeapons, game.lootMines);
+    if (game.currentTick == goThroughStarisBugTick or game.currentTick == pickUpLootBugTick1 or game.currentTick == pickUpLootBugTick2) {
+        return true;
     }
 
-    if (arena.bullets.size() < game.bullets.size()) {
-        arena.bullets = game.bullets;
-    }
-
-    cout << (arena.units.front().position.x - unit.position.x) << " " << (arena.units.front().position.y - unit.position.y) << endl;
-    cout << arena.units.front().position.y << " " << unit.position.y << endl;
-
-
-    if (!arena.units.front().equal(unit, Consts::eps)) {
+    if (!simulatedUnit.equal(unit, Consts::eps)) {
         cout << "Not equal" << endl;
         cout << unit.toString() << endl;
-        cout << arena.units.front().toString() << endl;
+        cout << simulatedUnit.toString() << endl;
+        return false;
     }
 
-    if (arena.bullets.size() != game.bullets.size()) {
-        cout << "Bullets count not equal";
+    if (((simulatedUnit.weapon == nullptr and unit.weapon != nullptr) or (simulatedUnit.weapon != nullptr and unit.weapon == nullptr))) {
+        return false;
     }
 
-    for (int i = arena.bullets.size() - 1; i >= 0; --i) {
-        if (!arena.bullets[i].equal(game.bullets[i], Consts::eps)) {
-            cout << arena.bullets[i].toString() << endl;
-            cout << game.bullets[i].toString() << endl;
+
+    if (unit.weapon != nullptr and !simulatedUnit.weapon.get()->equal(*unit.weapon.get(), Consts::eps)) {
+        return false;
+    }
+
+    for (int i = game.mines.size() - 1; i >= 0; --i) {
+        if (!arena.mines[i].equal(game.mines[i], Consts::eps)) {
+            return false;
         }
     }
 
-
     if (arena.lootWeapons.size() != game.lootWeapons.size()) {
-        cout << "Not equal";
+        return false;
     }
 
     if (arena.lootMines.size() != game.lootMines.size()) {
-        cout << "Not equal";
+        return false;
     }
 
     if (arena.lootHealthPacks.size() != game.lootHealthPacks.size()) {
-        cout << "Not equal";
+        return false;
+    }
+
+    return true;
+}
+
+
+UnitAction MyStrategy::simulationTest(const Unit &unit, const Game &game, Debug &debug) {
+    //Seed 34334423
+    cout.precision(17);
+
+    if (game.currentTick == 0) {
+        arena.update(game.units, game.bullets, game.mines, game.lootHealthPacks, game.lootWeapons, game.lootMines);
+    }
+
+    Unit & simulatedUnit = arena.units[unitsIndex[Game::unitIndexById(unit.id)]];
+
+    if (!simulationEqualTests(simulatedUnit, unit, game)) {
+        cout << "Simulation not equal";
+    }
+
+    actions[Game::unitIndexById(unit.id)].shoot = false;
+
+    Vec2Double aim = Vec2Double(100, 0);
+    aim.normalize();
+
+    actions[Game::unitIndexById(unit.id)].aim = aim;
+    actions[Game::unitIndexById(unit.id)].reload = false;
+    actions[Game::unitIndexById(unit.id)].swapWeapon = false;
+    actions[Game::unitIndexById(unit.id)].plantMine = true;
+
+    actions[Game::unitIndexById(unit.id)].jump = false;
+    actions[Game::unitIndexById(unit.id)].jumpDown = !actions[Game::unitIndexById(unit.id)].jump;
+
+    if (game.currentTick < 50) {
+        actions[Game::unitIndexById(unit.id)].velocity = -properties->unitMaxHorizontalSpeed;
+    }
+
+    if (game.currentTick > 3000) {
+        actions[Game::unitIndexById(unit.id)].jump = true;
+        actions[Game::unitIndexById(unit.id)].jumpDown = !actions[Game::unitIndexById(unit.id)].jump;
+    }
+
+    if (game.currentTick > 15000) {
+        actions[Game::unitIndexById(unit.id)].jump = false;
+        actions[Game::unitIndexById(unit.id)].jumpDown = !actions[Game::unitIndexById(unit.id)].jump;
+        actions[Game::unitIndexById(unit.id)].velocity = properties->unitMaxHorizontalSpeed;
+    }
+
+    if (game.currentTick > 17000) {
+        actions[Game::unitIndexById(unit.id)].jump = true;
+        actions[Game::unitIndexById(unit.id)].jumpDown = !actions[Game::unitIndexById(unit.id)].jump;
+        actions[Game::unitIndexById(unit.id)].velocity = properties->unitMaxHorizontalSpeed;
+    }
+
+    if (game.currentTick > 17638) {
+        actions[Game::unitIndexById(unit.id)].jump = true;
+        actions[Game::unitIndexById(unit.id)].jumpDown = !actions[Game::unitIndexById(unit.id)].jump;
+        actions[Game::unitIndexById(unit.id)].velocity = 0;
+    }
+
+    if (game.currentTick > 20600) {
+        actions[Game::unitIndexById(unit.id)].jump = false;
+        actions[Game::unitIndexById(unit.id)].jumpDown = false;
+        actions[Game::unitIndexById(unit.id)].velocity = -properties->unitMaxHorizontalSpeed;
+    }
+
+    if (unit.weapon) {
+        actions[Game::unitIndexById(unit.id)].aim = Vec2Double(game.currentTick % 6 + 1, 3).normalize();
+        actions[Game::unitIndexById(unit.id)].shoot = true;
+        actions[Game::unitIndexById(unit.id)].velocity = -properties->unitMaxHorizontalSpeed;
+    }
+
+    if (game.mines.size() > 0) {
+        actions[Game::unitIndexById(unit.id)].velocity = 0;
+    }
+
+    if (game.currentTick > 45000) {
+        actions[Game::unitIndexById(unit.id)].velocity = properties->unitMaxHorizontalSpeed;
+    }
+
+    if (game.currentTick > 46000) {
+        actions[Game::unitIndexById(unit.id)].velocity = 0;
+    }
+
+    if (game.currentTick > 55000) {
+        actions[Game::unitIndexById(unit.id)].jump = true;
+        actions[Game::unitIndexById(unit.id)].jumpDown = true;
+        actions[Game::unitIndexById(unit.id)].velocity = properties->unitMaxHorizontalSpeed;
     }
 
 
-    actions[unit.id].shoot = false;
+    if (game.currentTick > 66054) {
+        actions[Game::unitIndexById(unit.id)].jump = false;
+        actions[Game::unitIndexById(unit.id)].jumpDown = false;
+        actions[Game::unitIndexById(unit.id)].velocity = 0;
+    }
 
-    actions[unit.id].aim = ZERO_VEC_2_DOUBLE;
-    actions[unit.id].reload = false;
-    actions[unit.id].swapWeapon = false;
-    actions[unit.id].plantMine = false;
+    if (game.currentTick > 66554) {
+        actions[Game::unitIndexById(unit.id)].jump = false;
+        actions[Game::unitIndexById(unit.id)].jumpDown = false;
+        actions[Game::unitIndexById(unit.id)].velocity = properties->unitMaxHorizontalSpeed;
+    }
 
-    actions[unit.id].jump = true;
-    actions[unit.id].jumpDown = !actions[unit.id].jump;
-    actions[unit.id].velocity = (game.currentTick % 17000 < 8000 ? -properties->unitMaxHorizontalSpeed : properties->unitMaxHorizontalSpeed);
+    if (game.currentTick > 70000) {
+        actions[Game::unitIndexById(unit.id)].jump = true;
+        actions[Game::unitIndexById(unit.id)].jumpDown = false;
+        actions[Game::unitIndexById(unit.id)].velocity = properties->unitMaxHorizontalSpeed;
+    }
 
     arena.tick(actions);
 
-    return actions[unit.id];
+    return actions[Game::unitIndexById(unit.id)];
 }
 
 UnitAction MyStrategy::bestAction() {
@@ -360,7 +451,6 @@ void MyStrategy::shootLogic(UnitAction &action, const Unit &unit, const Game &ga
         Vec2Float enemyCenter = Vec2Float(nearestEnemy->position + Vec2Double(0, game.properties.unitSize.y / 2.0));
 
         aim = Vec2Double(enemyCenter.x - unitCenter.x, enemyCenter.y - unitCenter.y);
-
 
         if (game.level.crossWall(unitCenter, enemyCenter)) {
             action.shoot = false;

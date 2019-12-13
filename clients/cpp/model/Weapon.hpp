@@ -23,14 +23,17 @@ public:
     int magazine;
     bool wasShooting;
     double spread;
-    std::shared_ptr<double> fireTimer;
-    std::shared_ptr<double> lastAngle;
-    std::shared_ptr<int> lastFireTick;
+
+    double fireTimer;
+    double lastAngle;
+    int lastFireTick;
     Weapon();
-    Weapon(WeaponType typ, WeaponParams params, int magazine, bool wasShooting, double spread, std::shared_ptr<double> fireTimer, std::shared_ptr<double> lastAngle, std::shared_ptr<int> lastFireTick);
+    Weapon(WeaponType typ, WeaponParams params, int magazine, bool wasShooting, double spread, double fireTimer, double lastAngle, int lastFireTick);
     static Weapon readFrom(InputStream& stream);
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
+
+    bool equal(const Weapon & weapon, double eps) const;
 };
 
 #endif

@@ -20,6 +20,7 @@
 #include <list>
 #include "Bullet.hpp"
 #include "LootBox.hpp"
+#include "Mine.hpp"
 
 
 using namespace std;
@@ -42,8 +43,8 @@ public:
     Vec2Double position;
     Vec2Double prevPosition;
 
-    Vec2Double leftTop;
-    Vec2Double rightDown;
+    Vec2Float leftTop;
+    Vec2Float rightDown;
 
     int posTileX;
     int posTileY;
@@ -54,7 +55,7 @@ public:
     int topTileY;
     int meanTileY;
 
-    int minDownDeltaTileY;
+    int minUpDeltaTileY;
 
     Vec2Double size;
 
@@ -64,6 +65,8 @@ public:
     bool stand;
     bool onGround;
     bool onLadder;
+    bool onPlatform = false;
+
     int mines;
     std::shared_ptr<Weapon> weapon;
 
@@ -86,7 +89,9 @@ public:
 
     bool equal(const Unit &unit, double eps) const;
 
-    static Unit readFrom(InputStream& stream, Properties * properties, Level *level);
+    void init(InputStream &stream, Properties *properties, Level *level);
+    void update(InputStream& stream);
+
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
 
@@ -106,6 +111,7 @@ public:
 
     void horizontalWallCollision(double velocity);
     void verticalWallCollision();
+    void platformCollision();
 
     void applyJumpPad(double speed, double maxTime);
     void applyOnGround();
@@ -121,6 +127,10 @@ public:
     bool picUpkMine(const LootBox &lootbox);
 
     bool isPickUpLootbox(const LootBox &lootbox);
+    void weaponRoutine(double time, const Vec2Double & aim);
+    void plantMine(vector<Mine> & mines);
+    void unitHorCollide(Unit & unit);
+    void unitVerCollide(Unit & unit);
 };
 
 

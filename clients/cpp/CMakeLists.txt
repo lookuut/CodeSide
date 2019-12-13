@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5)
 project(aicup2019)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "-std=c++17 -D_LINUX -O3 -g -Wall")
+#set(CMAKE_CXX_FLAGS "-std=c++17 -D_LINUX -O3 -g -Wall")
 
 file(GLOB HEADERS "*.hpp" "model/*.hpp" "csimplesocket/*.h")
 SET_SOURCE_FILES_PROPERTIES(${HEADERS} PROPERTIES HEADER_FILE_ONLY TRUE)

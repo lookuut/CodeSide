@@ -30,33 +30,53 @@ Unit::Unit(
     widthHalf = size.x / 2.0;
 }
 
-Unit Unit::readFrom(InputStream& stream, Properties * properties, Level *level) {
-    Unit result;
-    result.playerId = stream.readInt();
-    result.properties = properties;
-    result.level = level;
-    result.id = stream.readInt();
-    result.health = stream.readInt();
-    result.position = Vec2Double::readFrom(stream);
-    result.size = Vec2Double::readFrom(stream);
-    result.jumpState = JumpState::readFrom(stream);
-    result.walkedRight = stream.readBool();
-    result.stand = stream.readBool();
-    result.onGround = stream.readBool();
-    result.onLadder = stream.readBool();
-    result.mines = stream.readInt();
-    result.widthHalf = result.size.x / 2.0;
+void Unit::init(InputStream &stream, Properties *properties, Level *level) {
+    playerId = stream.readInt();
+    this->properties = properties;
+    this->level = level;
+    id = stream.readInt();
+    health = stream.readInt();
+    position = Vec2Double::readFrom(stream);
+    size = Vec2Double::readFrom(stream);
+    jumpState = JumpState::readFrom(stream);
+    walkedRight = stream.readBool();
+    stand = stream.readBool();
+    onGround = stream.readBool();
+    onLadder = stream.readBool();
+    mines = stream.readInt();
+    widthHalf = size.x / 2.0;
 
-    result.updateTilePos();
+    updateTilePos();
 
     if (stream.readBool()) {
-        result.weapon = std::shared_ptr<Weapon>(new Weapon());
-        *result.weapon = Weapon::readFrom(stream);
+        weapon = std::shared_ptr<Weapon>(new Weapon());
+        *weapon = Weapon::readFrom(stream);
     } else {
-        result.weapon = std::shared_ptr<Weapon>();
+        weapon = std::shared_ptr<Weapon>();
     }
-    return result;
 }
+
+void Unit::update(InputStream &stream) {
+    health = stream.readInt();
+    position = Vec2Double::readFrom(stream);
+    Vec2Double::readFrom(stream);
+    jumpState = JumpState::readFrom(stream);
+    walkedRight = stream.readBool();
+    stand = stream.readBool();
+    onGround = stream.readBool();
+    onLadder = stream.readBool();
+    mines = stream.readInt();
+
+    updateTilePos();
+
+    if (stream.readBool()) {
+        weapon = std::shared_ptr<Weapon>(new Weapon());
+        *weapon = Weapon::readFrom(stream);
+    } else {
+        weapon = std::shared_ptr<Weapon>();
+    }
+}
+
 void Unit::writeTo(OutputStream& stream) const {
     stream.write(playerId);
     stream.write(id);
@@ -123,7 +143,7 @@ void Unit::updateMoveState() {
 }
 
 bool Unit::equal(const Unit &unit, double eps) const {
-    return unit.onLadder == onLadder and unit.health == health and unit.onGround == onGround and (unit.position - position).len() <= eps and unit.jumpState.equal(jumpState , eps);
+    return unit.mines == mines and unit.onLadder == onLadder and unit.health == health /*and unit.onGround == onGround*/ and (unit.position - position).len() <= eps and unit.jumpState.equal(jumpState , eps);
 }
 
 
@@ -135,8 +155,8 @@ void Unit::updateTilePos() {
     rightPosTileX = (int)(position.x + widthHalf);
 
     topTileY = (int)(position.y + size.y);
-    meanTileY = (int)(position.y + widthHalf);
-    minDownDeltaTileY = (int)(position.y + properties->unitFallSpeed / (Consts::microticks * properties->ticksPerSecond));
+    meanTileY = (int)(position.y + size.y / 2.0);
+    minUpDeltaTileY = (int)(position.y + properties->unitFallSpeed / ((double)Consts::microticks * properties->ticksPerSecond));
 
     leftTop.x = position.x - widthHalf;
     leftTop.y = position.y + size.y;
@@ -150,7 +170,7 @@ bool Unit::isOnLadder() {
 }
 
 bool Unit::isOnGround() {
-    return isOnLadder() or isOnPlatform() or level->tiles[leftPosTileX][minDownDeltaTileY] == Tile::WALL or level->tiles[rightPosTileX][minDownDeltaTileY] == Tile::WALL;
+    return isOnLadder() or isOnPlatform() or level->tiles[leftPosTileX][minUpDeltaTileY] == Tile::WALL or level->tiles[rightPosTileX][minUpDeltaTileY] == Tile::WALL;
 }
 
 bool Unit::isInGround() {
@@ -163,8 +183,9 @@ bool Unit::isOnWall() {
 
 bool Unit::isOnPlatform() {
 
-    return (level->tiles[leftPosTileX][minDownDeltaTileY] != Tile::PLATFORM or level->tiles[rightPosTileX][minDownDeltaTileY] != Tile::PLATFORM)
-            and (level->tiles[leftPosTileX][posTileY] == Tile::PLATFORM or level->tiles[rightPosTileX][posTileY] == Tile::PLATFORM);
+    return (level->tiles[leftPosTileX][minUpDeltaTileY] != Tile::PLATFORM or level->tiles[rightPosTileX][minUpDeltaTileY] != Tile::PLATFORM)
+            and (level->tiles[leftPosTileX][posTileY] == Tile::PLATFORM or level->tiles[rightPosTileX][posTileY] == Tile::PLATFORM) and
+            (prevPosition.y >= posTileY + 1);
 }
 
 bool Unit::isOnJumpPad() {
@@ -184,7 +205,13 @@ void Unit::horizontalWallCollision(double velocity) {
 
     int direction = (velocity < 0 ? -1 : 1);
     if (upTile == Tile::WALL or meanTile == Tile::WALL or downTile == Tile::WALL) {
-        position.x = (double)tileX - direction * ((direction < 0 ? 1.0 : 0)  +  size.x / 2.0) + -direction * (abs(position.x - prevPosition.x) > Consts::eps ? Consts::eps : .0);
+        double distance = abs((double)tileX - direction - prevPosition.x - direction * widthHalf);
+
+        if (distance < Consts::eps) {
+            position.x = prevPosition.x;
+        } else {
+            position.x = (double)tileX - direction * ((direction < 0 ? 1.0 : 0)  +  size.x / 2.0) + -direction * (abs(distance) > Consts::eps ? Consts::eps : .0);
+        }
     }
 
     updateTilePos();
@@ -196,7 +223,13 @@ void Unit::heatRoofRoutine() {
         applyJumpCancel();
 
         double distance = (double)topTileY - size.y - prevPosition.y;
-        position.y = (double)topTileY - size.y - ((distance > Consts::eps) ? Consts::eps : .0);
+
+        if (distance > Consts::eps) {
+            position.y = topTileY - (size.y + Consts::eps);
+        } else {
+            position.y = prevPosition.y;
+        }
+
         updateTilePos();
     }
 }
@@ -207,10 +240,29 @@ void Unit::verticalWallCollision() {
 
     double distance = prevPosition.y - (double)posTileY - 1.0;
 
-    position.y = (double)posTileY + 1.0 + ((distance > Consts::eps) ? Consts::eps : .0);
+    if (distance > Consts::eps) {
+        position.y = (double)posTileY + 1.0 + ((distance > Consts::eps) ? Consts::eps : .0);
+    } else {
+        position.y = prevPosition.y;
+    }
 
     updateTilePos();
     updateMoveState();
+}
+
+void Unit::platformCollision() {
+    double distance = prevPosition.y - (double)posTileY - 1.0;
+
+    if (distance > Consts::eps) {
+        position.y = (double)posTileY + 1.0 + ((distance > Consts::eps) ? Consts::eps : .0);
+    } else {
+        position.y = prevPosition.y;
+    }
+
+    applyOnGround();
+    updateTilePos();
+    updateMoveState();
+    onPlatform = true;
 }
 
 void Unit::applyJumpPad(double speed, double maxTime) {
@@ -282,10 +334,10 @@ bool Unit::pickUpWeapon(const LootBox &lootBox) {
                         properties->weaponParams[w.get()->weaponType],
                         properties->weaponParams[w.get()->weaponType].magazineSize,
                         false,
-                        properties->weaponParams[w.get()->weaponType].maxSpread,
-                        0,
-                        0,
-                        0));
+                        properties->weaponParams[w.get()->weaponType].minSpread,
+                        properties->weaponParams[w.get()->weaponType].reloadTime,
+                        Consts::noLastAngleValue,
+                        -1));
         return true;
     }
 
@@ -304,4 +356,87 @@ bool Unit::picUpkMine(const LootBox &lootbox) {
 
 bool Unit::isPickUpLootbox(const LootBox &lootBox) {
     return Geometry::isRectOverlap(leftTop, rightDown, lootBox.leftTop, lootBox.rightDown);
+}
+
+void Unit::weaponRoutine(double time, const Vec2Double & aim) {
+    if (weapon) {
+        Weapon * weapon = this->weapon.get();
+
+        double angle = atan2(aim.y, aim.x);
+
+        weapon->fireTimer -= time;
+
+        if (weapon->fireTimer < .0) {
+            weapon->fireTimer = .0;
+        }
+
+
+        weapon->spread += (weapon->lastAngle != Consts::noLastAngleValue ? abs(angle - weapon->lastAngle) : 0);
+        if (weapon->spread > weapon->params.maxSpread) {
+            weapon->spread = weapon->params.maxSpread;
+        }
+
+        weapon->spread -= (weapon->params.aimSpeed * time);
+
+        if (weapon->spread < weapon->params.minSpread) {
+            weapon->spread = weapon->params.minSpread;
+        }
+
+        weapon->lastAngle = atan2(aim.y, aim.x);
+    }
+}
+
+void Unit::plantMine(vector<Mine> &mines) {
+    if (onGround and this->mines >= 1
+        and
+        (
+            (level->tiles[posTileX][posTileY - 1] == Tile::WALL or level->tiles[posTileX][posTileY - 1] == Tile::PLATFORM)
+        )
+        and
+        (
+            (level->tiles[leftPosTileX][posTileY - 1] == Tile::WALL or level->tiles[leftPosTileX][posTileY - 1] == Tile::PLATFORM)
+            or
+            (level->tiles[rightPosTileX][posTileY - 1] == Tile::WALL or level->tiles[rightPosTileX][posTileY - 1] == Tile::PLATFORM)
+        )
+     ) {
+
+        Mine mine = Mine(
+                playerId,
+                position,
+                properties->mineSize,
+                MineState::PREPARING,
+                shared_ptr<double>(new double(properties->minePrepareTime)),
+                properties->mineTriggerRadius,
+                properties->mineExplosionParams
+                );
+
+        mines.push_back(mine);
+
+        --this->mines;
+    }
+}
+
+void Unit::unitHorCollide(Unit & unit) {
+
+    if (Geometry::isRectOverlap(unit.leftTop, unit.rightDown, leftTop, rightDown)) {
+        if (position.x > unit.position.x) {
+            position.x = unit.position.x + unit.widthHalf;
+        } else {
+            position.x = unit.position.x - unit.widthHalf;
+        }
+    }
+}
+
+void Unit::unitVerCollide(Unit &unit) {
+    if (Geometry::isRectOverlap(unit.leftTop, unit.rightDown, leftTop, rightDown)) {
+        if (position.y > unit.position.y) {
+            position.y = unit.position.y + unit.size.y;
+            applyOnGround();
+            unit.applyJumpCancel();
+        } else {
+            position.y = unit.position.y - unit.size.y;
+            applyJumpCancel();
+            unit.applyOnGround();
+        }
+    }
 }

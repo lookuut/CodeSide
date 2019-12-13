@@ -29,8 +29,8 @@ public:
 
     void operator+=(const Vec2Double & vec);
     void operator-=(const Vec2Double & vec);
-    bool operator==(const Vec2Double & vec);
-    bool operator!=(const Vec2Double & vec);
+    bool operator==(const Vec2Double & vec) const;
+    bool operator!=(const Vec2Double & vec) const;
 
     void operator*=(double f);
 

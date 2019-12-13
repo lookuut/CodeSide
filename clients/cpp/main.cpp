@@ -34,7 +34,14 @@ public:
         }
     }
 
-    MyStrategy myStrategy(&playerView.get()->game->properties, &playerView.get()->game->level, playerView.get()->myId, enemyPlayerId, playerView->game->units);
+    MyStrategy myStrategy(
+            &playerView.get()->game->properties,
+            &playerView.get()->game->level,
+            playerView.get()->myId,
+            enemyPlayerId,
+            playerView->game->units,
+            playerView->game->unitsIndex
+            );
 
     std::unordered_map<int, UnitAction> actions;
     for (const Unit &unit : playerView->game->units) {

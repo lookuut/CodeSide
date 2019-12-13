@@ -3,10 +3,13 @@
 //
 
 #include "Arena.hpp"
+#include "../utils/Geometry.h"
 #include <chrono>
 #include <ctime>
-
+#include <math.h>
 #include <iostream>
+#include "../model/Game.hpp"
+
 using namespace std;
 
 template <typename T> int sgn(T val) {
@@ -34,6 +37,30 @@ void Arena::update(
     this->lootMines = lootMines;
 }
 
+void Arena::mineMicrotick() {
+
+    for (int i = mines.size() - 1; i >= 0; --i) {
+        Mine & mine = mines[i];
+
+        if (mine.timer) {
+            *mine.timer.get() -= microTicksPerSecond;
+
+            if (*mine.timer <= 0) {
+                switch (mine.state) {
+                    case MineState::PREPARING:
+                        mine.state = MineState::IDLE;
+                        mine.timer = nullptr;
+                        break;
+                    case MineState::TRIGGERED://explode
+                        mine.explode(units, mines, i);
+                        break;
+                    default:
+                        throw std::runtime_error("Unexpected discriminant value");
+                }
+            }
+        }
+    }
+}
 
 void Arena::bulletMicrotick() {
 
@@ -43,6 +70,7 @@ void Arena::bulletMicrotick() {
 
         bullet.move(bullet.velocity);
 
+        bool isHeatUnit = false;
         for (Unit & unit: units) {
 
             if (unit.id != bullet.unitId and unit.isOverlap(bullet)) {
@@ -52,11 +80,14 @@ void Arena::bulletMicrotick() {
                 } else {
                     unit.health -= bullet.damage;
                 }
-
-                it = bullets.erase(it);
-            } else {
-                ++it;
+                isHeatUnit = true;
             }
+        }
+
+        if (isHeatUnit) {
+            it = bullets.erase(it);
+        } else {
+            ++it;
         }
     }
 }
@@ -76,9 +107,8 @@ void Arena::bulletOverlapWithUnit(Unit &unit) {
 
                 if (bullet.weaponType == WeaponType::ROCKET_LAUNCHER) {
                     bullet.explossion(units);
-                } else {
-                    unit.health -= bullet.damage;
                 }
+                unit.health -= bullet.damage;
 
                 it = bullets.erase(it);
                 continue;
@@ -126,6 +156,31 @@ void Arena::bulletWallOverlap() {
     }
 }
 
+void Arena::bulletMineOverlap() {
+    auto it = bullets.begin();
+
+    while (it != bullets.end()) {
+        Bullet & bullet = *it;
+
+        bool heatMine = false;
+        for (int i = mines.size() - 1; i >= 0; --i) {
+            Mine & mine = mines[i];
+
+            if (Geometry::isRectOverlap(bullet.leftTop, bullet.rightDown, mine.leftTopAngle, mine.rightDownAngle)) {
+                mine.explode(units, mines, i);
+                heatMine = true;
+                break;
+            }
+        }
+
+        if (heatMine) {
+            it = bullets.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 void Arena::pickUpLoots(Unit & unit) {//@TODO how it works?
 
     for (auto it = lootHealthPacks.begin(); it != lootHealthPacks.end(); ) {
@@ -153,6 +208,58 @@ void Arena::pickUpLoots(Unit & unit) {//@TODO how it works?
     }
 }
 
+void Arena::shootAction(Unit &unit, const Vec2Double & aim) {
+
+    if (unit.weapon != nullptr and aim != ZERO_VEC_2_DOUBLE) {
+        Weapon * weapon = unit.weapon.get();
+
+        if (weapon->fireTimer <= .0 and weapon->magazine > 0) {
+            double randomSpread = weapon->spread * (double)rand() / RAND_MAX - weapon->spread / 2.0;
+
+            Vec2Double vel = Vec2Double(aim.x * weapon->params.bullet.speed, aim.y * weapon->params.bullet.speed);
+            Bullet bullet = Bullet(
+                    weapon->type,
+                    unit.id,
+                    unit.playerId,
+                    Vec2Double(unit.position.x, unit.position.y + unit.size.y / 2.0),
+                    vel.rotate(randomSpread),
+                    weapon->params.bullet.damage,
+                    weapon->params.bullet.size,
+                    weapon->params.explosion
+            );
+            bullets.push_back(bullet);
+
+            double angle = atan2(aim.y, aim.x);
+            weapon->fireTimer = weapon->params.fireRate;
+            weapon->lastFireTick = currentTick;
+
+            weapon->spread += weapon->params.recoil + (weapon->lastAngle != Consts::noLastAngleValue ? abs(angle - weapon->lastAngle) : 0);
+
+            if (weapon->spread > weapon->params.maxSpread) {
+                weapon->spread = weapon->params.maxSpread;
+            }
+
+            weapon->lastAngle = angle;
+
+            --weapon->magazine;
+
+            if (weapon->magazine <= 0) {
+                weapon->fireTimer = weapon->params.reloadTime;
+                weapon->magazine = weapon->params.magazineSize;
+            }
+        }
+    }
+}
+
+void Arena::mineActicate(const Unit &unit) {
+
+    for (Mine & mine : mines) {
+        if (mine.state == MineState::IDLE and Geometry::isRectOverlap(unit.leftTop, unit.rightDown, mine.activateLeftTopAngle, mine.activateRightDownAngle)) {
+            mine.state = MineState ::TRIGGERED;
+            mine.timer = shared_ptr<double>(new double(properties->mineTriggerTime + microTicksPerSecond));
+        }
+    }
+}
 
 void Arena::tick(const vector<UnitAction> & actions) {
 
@@ -161,67 +268,104 @@ void Arena::tick(const vector<UnitAction> & actions) {
         chrono::system_clock::time_point start = chrono::system_clock::now();
 
         for (int j = 0; j < 10000; ++j) {
-    */        for (Unit &unit : units) {
-                const UnitAction &action = actions[unit.id];
-                double horSpeed = sgn(action.velocity) * min(abs(action.velocity), properties->unitMaxHorizontalSpeed);
+    */
 
-                for (int i = 0; i < Consts::microticks; ++i) {
 
-                    bulletMicrotick();
+    for (Unit &unit : units) {
+        const UnitAction &action = actions[Game::unitIndexById(unit.id)];
 
-                    unit.prevPosition = unit.position;
+        if (action.plantMine) {
+            unit.plantMine(mines);
+        }
+    }
 
-                    unit.moveHor(horSpeed * microTicksPerSecond);
-                    unit.horizontalWallCollision(horSpeed);
+    for (int i = 0; i < Consts::microticks; ++i) {
 
-                    if (unit.jumpState.canJump and unit.jumpState.canCancel) {//Jumping
-                        if (action.jump) {
-                            unit.jumping(unit.jumpState.speed * microTicksPerSecond, microTicksPerSecond);
-                        }
-                    }
+        bulletMicrotick();
 
-                    if (!unit.jumpState.canJump and unit.jumpState.maxTime <= .0) {//Down
-                        unit.downing(properties->unitFallSpeed * microTicksPerSecond);
-                    }
+        for (Unit &unit : units) {
+            const UnitAction &action = actions[Game::unitIndexById(unit.id)];
+            double horSpeed = sgn(action.velocity) * min(abs(action.velocity), properties->unitMaxHorizontalSpeed);
 
-                    if (unit.jumpState.canCancel) {//Down
-                        if (!action.jump) {
-                            unit.downing(properties->unitFallSpeed * microTicksPerSecond);
-                            unit.applyJumpCancel();
-                        }
-                    } else if (unit.jumpState.maxTime > 0) {
-                        unit.jumping(unit.jumpState.speed * microTicksPerSecond, microTicksPerSecond);
-                    }
+            if (action.plantMine) {
+                unit.plantMine(mines);
+            }
 
-                    unit.heatRoofRoutine();
+            if (action.shoot) {
+                shootAction(unit, action.aim);
+            }
 
-                    if (unit.jumpState.maxTime <= .0) {
-                        unit.applyJumpCancel();
-                    }
+            unit.weaponRoutine(microTicksPerSecond, action.aim);
+            pickUpLoots(unit);
 
-                    if (unit.isOnWall() or (unit.isOnPlatform() and !unit.jumpState.canJump and !action.jumpDown)) {
-                        unit.verticalWallCollision();
-                    }
+            unit.prevPosition = unit.position;
 
-                    if (unit.onLadder) {
-                        unit.applyOnGround();
-                    }
+            unit.moveHor(horSpeed * microTicksPerSecond);
+            unit.horizontalWallCollision(horSpeed);
 
-                    if (unit.isOnJumpPad()) {
-                        unit.applyJumpPad(properties->jumpPadJumpSpeed, properties->jumpPadJumpTime);
-                    }
-
-                    bulletOverlapWithUnit(unit);
-
-                    pickUpLoots(unit);
-
-                    unit.prevPosition = unit.position;
-
-                    bulletWallOverlap();
+            for (Unit & opponentUnit : units) {
+                if (opponentUnit.id != unit.id) {
+                    unit.unitHorCollide(opponentUnit);
                 }
             }
 
-            ++currentTick;
+            if (unit.jumpState.canJump and unit.jumpState.canCancel) {//Jumping
+                if (action.jump) {
+                    unit.jumping(unit.jumpState.speed * microTicksPerSecond, microTicksPerSecond);
+                }
+            }
+
+            if (!unit.jumpState.canJump and unit.jumpState.maxTime <= .0) {//Down
+                unit.downing(properties->unitFallSpeed * microTicksPerSecond);
+            }
+
+            if (unit.jumpState.canCancel) {//Down
+                if (!action.jump) {
+                    unit.downing(properties->unitFallSpeed * microTicksPerSecond);
+                    unit.applyJumpCancel();
+                }
+            } else if (unit.jumpState.maxTime > 0) {
+                unit.jumping(unit.jumpState.speed * microTicksPerSecond, microTicksPerSecond);
+            }
+
+            unit.heatRoofRoutine();
+
+            if (unit.jumpState.maxTime <= .0) {
+                unit.applyJumpCancel();
+            }
+
+            if (unit.isOnWall()) {
+                unit.verticalWallCollision();
+            } else if (unit.isOnPlatform() and !unit.jumpState.canJump and !action.jumpDown) {
+                unit.platformCollision();
+            }
+
+            if (unit.onLadder) {
+                unit.applyOnGround();
+            }
+
+            if (unit.isOnJumpPad()) {
+                unit.applyJumpPad(properties->jumpPadJumpSpeed, properties->jumpPadJumpTime);
+            }
+
+            for (Unit & opponentUnit : units) {
+                if (opponentUnit.id != unit.id) {
+                    unit.unitVerCollide(opponentUnit);
+                }
+            }
+
+            bulletOverlapWithUnit(unit);
+            mineActicate(unit);
+
+            unit.prevPosition = unit.position;
+        }
+
+        mineMicrotick();
+        bulletMineOverlap();
+        bulletWallOverlap();
+    }
+
+    ++currentTick;
         /*}
 
         chrono::system_clock::time_point end = chrono::system_clock::now();
@@ -229,29 +373,3 @@ void Arena::tick(const vector<UnitAction> & actions) {
         cout << micros << endl;
     }*/
 }
-
-/*for (Unit & unit : units) {
-        UnitAction action = unit.actions.front();
-
-        Weapon * currentWeapon = unit.weapon.get();
-
-        if (action.shoot and currentWeapon != nullptr and currentWeapon->lastFireTick != nullptr and action.aim != ZERO_VEC_2_DOUBLE) {//can shoot
-
-            action.aim.normalize() *= currentWeapon->params.bullet.speed;
-
-            Bullet bullet = Bullet(
-                    currentWeapon->type,
-                    unit.id,
-                    unit.playerId,
-                    Vec2Double(unit.position.x, unit.position.y + unit.size.y / 2.0),
-                    action.aim,
-                    currentWeapon->params.bullet.damage,
-                    currentWeapon->params.bullet.size,
-                    currentWeapon->params.explosion
-            );
-
-            bullets.push_back(bullet);
-
-    }
-
-    }*/

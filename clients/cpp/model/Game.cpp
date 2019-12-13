@@ -36,16 +36,21 @@ Game * Game::init(InputStream &stream) {
         game->players[i] = Player::readFrom(stream);
         game->playerUnits[game->players[i].id] = vector<Unit*>();
     }
+
     game->units = std::vector<Unit>(stream.readInt());
 
     for (size_t i = 0; i < game->units.size(); i++) {
-        game->units[i] = Unit::readFrom(stream, &game->properties, &game->level);
+        game->units[i].init(stream, &game->properties, &game->level);
+        game->unitsIndex[Game::unitIndexById(game->units[i].id)] = i;
+
         game->playerUnits[game->units[i].playerId].push_back(&game->units[i]);
+        game->maxUnitId = max(game->units[i].id, game->maxUnitId);
     }
     game->bullets = std::vector<Bullet>(stream.readInt());
     for (size_t i = 0; i < game->bullets.size(); i++) {
         game->bullets[i] = Bullet::readFrom(stream);
     }
+    game->unitBullets = vector(game->maxUnitId + 1, vector<Bullet*>());
     game->mines = std::vector<Mine>(stream.readInt());
     for (size_t i = 0; i < game->mines.size(); i++) {
         game->mines[i] = Mine::readFrom(stream);
@@ -90,20 +95,29 @@ Game * Game::updateTick(InputStream &stream) {
         game->players[i] = Player::readFrom(stream);
         game->playerUnits[game->players[i].id] = vector<Unit*>();
     }
-    game->units = std::vector<Unit>(stream.readInt());
+
+    stream.readInt();
 
     for (size_t i = 0; i < game->units.size(); i++) {
-        game->units[i] = Unit::readFrom(stream, &game->properties, &game->level);
+        stream.readInt();//playerId
+        int unitId = stream.readInt();
+        game->units[game->unitsIndex[Game::unitIndexById(unitId)]].update(stream);
         game->playerUnits[game->units[i].playerId].push_back(&game->units[i]);
     }
+
     game->bullets = std::vector<Bullet>(stream.readInt());
+
     for (size_t i = 0; i < game->bullets.size(); i++) {
         game->bullets[i] = Bullet::readFrom(stream);
+        game->unitBullets[game->bullets[i].unitId].push_back(&game->bullets[i]);
     }
+
     game->mines = std::vector<Mine>(stream.readInt());
+
     for (size_t i = 0; i < game->mines.size(); i++) {
         game->mines[i] = Mine::readFrom(stream);
     }
+
     std::vector<LootBox> lootBoxes = std::vector<LootBox>(stream.readInt());
 
     game->lootHealthPacks = vector<LootBox>();

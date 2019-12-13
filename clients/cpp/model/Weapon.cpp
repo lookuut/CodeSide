@@ -1,7 +1,29 @@
 #include "Weapon.hpp"
+#include "../Consts.h"
+#include <math.h>
 
 Weapon::Weapon() { }
-Weapon::Weapon(WeaponType typ, WeaponParams params, int magazine, bool wasShooting, double spread, std::shared_ptr<double> fireTimer, std::shared_ptr<double> lastAngle, std::shared_ptr<int> lastFireTick) : type(typ), params(params), magazine(magazine), wasShooting(wasShooting), spread(spread), fireTimer(fireTimer), lastAngle(lastAngle), lastFireTick(lastFireTick) { }
+Weapon::Weapon(
+        WeaponType type,
+        WeaponParams params,
+        int magazine,
+        bool wasShooting,
+        double spread,
+        double fireTimer,
+        double lastAngle,
+        int lastFireTick
+        ) :
+        type(type),
+        params(params),
+        magazine(magazine),
+        wasShooting(wasShooting),
+        spread(spread),
+        fireTimer(fireTimer),
+        lastAngle(lastAngle),
+        lastFireTick(lastFireTick) {
+
+}
+
 Weapon Weapon::readFrom(InputStream& stream) {
     Weapon result;
     switch (stream.readInt()) {
@@ -22,22 +44,19 @@ Weapon Weapon::readFrom(InputStream& stream) {
     result.wasShooting = stream.readBool();
     result.spread = stream.readDouble();
     if (stream.readBool()) {
-        result.fireTimer = std::shared_ptr<double>(new double());
-        *result.fireTimer = stream.readDouble();
+        result.fireTimer = stream.readDouble();
     } else {
-        result.fireTimer = std::shared_ptr<double>();
+        result.fireTimer = .0;
     }
     if (stream.readBool()) {
-        result.lastAngle = std::shared_ptr<double>(new double());
-        *result.lastAngle = stream.readDouble();
+        result.lastAngle = stream.readDouble();
     } else {
-        result.lastAngle = std::shared_ptr<double>();
+        result.lastAngle = Consts::noLastAngleValue;
     }
     if (stream.readBool()) {
-        result.lastFireTick = std::shared_ptr<int>(new int());
-        *result.lastFireTick = stream.readInt();
+        result.lastFireTick = stream.readInt();
     } else {
-        result.lastFireTick = std::shared_ptr<int>();
+        result.lastFireTick = -1;
     }
     return result;
 }
@@ -47,21 +66,23 @@ void Weapon::writeTo(OutputStream& stream) const {
     stream.write(magazine);
     stream.write(wasShooting);
     stream.write(spread);
-    if (fireTimer) {
+    if (fireTimer > 0) {
         stream.write(true);
-        stream.write((*fireTimer));
+        stream.write(fireTimer);
     } else {
         stream.write(false);
     }
-    if (lastAngle) {
+
+    if (lastAngle != Consts::noLastAngleValue) {
         stream.write(true);
-        stream.write((*lastAngle));
+        stream.write(lastAngle);
     } else {
         stream.write(false);
     }
-    if (lastFireTick) {
+
+    if (lastFireTick != -1) {
         stream.write(true);
-        stream.write((*lastFireTick));
+        stream.write(lastFireTick);
     } else {
         stream.write(false);
     }
@@ -77,4 +98,33 @@ std::string Weapon::toString() const {
         "TODO" + 
         "TODO" + 
         ")";
+}
+
+bool Weapon::equal(const Weapon &weapon, double eps) const {
+    if (!(abs(weapon.spread - spread) < eps
+        and
+        weapon.magazine == magazine
+        and
+        (abs(weapon.fireTimer - fireTimer) < eps)
+        and
+        weapon.type == type
+        and
+        (abs(weapon.lastAngle - lastAngle) < eps)
+        and
+        (weapon.lastFireTick == lastFireTick))) {
+        int i = 0;
+    }
+
+    return
+    abs(weapon.spread - spread) < eps
+    and
+    weapon.magazine == magazine
+    and
+    (abs(weapon.fireTimer - fireTimer) < eps)
+    and
+    weapon.type == type
+    and
+    (abs(weapon.lastAngle - lastAngle) < eps)
+    and
+    (weapon.lastFireTick == lastFireTick);
 }

@@ -59,8 +59,12 @@ public:
     void tick(const vector<UnitAction> & actions);
 
     void bulletMicrotick();
+    void mineMicrotick();
+    void mineActicate(const Unit & unit);
     void bulletOverlapWithUnit(Unit & unit);
     void bulletWallOverlap();
+    void bulletMineOverlap();
+    void shootAction(Unit & unit, const Vec2Double & aim);
 
     std::string toString() const;
     void pickUpLoots(Unit & unit);

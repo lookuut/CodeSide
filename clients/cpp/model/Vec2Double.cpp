@@ -42,11 +42,11 @@ void Vec2Double::operator-=(const Vec2Double &vec) {
     y -= vec.y;
 }
 
-bool Vec2Double::operator==(const Vec2Double &vec) {
+bool Vec2Double::operator==(const Vec2Double &vec) const{
     return x == vec.x and y == vec.y;
 }
 
-bool Vec2Double::operator!=(const Vec2Double &vec) {
+bool Vec2Double::operator!=(const Vec2Double &vec) const{
     return !(*this == vec);
 }
 

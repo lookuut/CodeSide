@@ -11,7 +11,9 @@ public:
     static constexpr double eps = 1.0e-9;
     static constexpr int simulationTicks = 10;
     static constexpr int maxSimulationDeep = 4;
-    static constexpr int microticks = 50;
+    static constexpr int microticks = 1;
+    static constexpr double noLastAngleValue = -100.0;
+    static constexpr int maxUnitCount = 4;
 };
 //      "ticks_per_second": 60,
 //      "updates_per_tick": 100,wwwwwa
