@@ -25,6 +25,7 @@ public:
     std::string toString() const;
 
     Vec2Double operator+(const Vec2Double & vec) const;
+    Vec2Double operator*(double factor) const;
     Vec2Double operator-(const Vec2Double & vec) const;
 
     void operator+=(const Vec2Double & vec);

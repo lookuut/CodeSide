@@ -28,6 +28,10 @@ Vec2Double Vec2Double::operator+(const Vec2Double &vec) const {
     return Vec2Double(x + vec.x, y + vec.y);
 }
 
+Vec2Double Vec2Double::operator*(double factor) const {
+    return Vec2Double(x * factor, y * factor);
+}
+
 Vec2Double Vec2Double::operator-(const Vec2Double &vec) const {
     return Vec2Double(x - vec.x, y - vec.y);
 }

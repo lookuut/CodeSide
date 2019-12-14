@@ -261,7 +261,7 @@ void Simulation::mineActicate(const Unit &unit) {
     }
 }
 
-void Simulation::tick(const vector<UnitAction> & actions) {
+void Simulation::tick(const vector<UnitAction> & actions, int ticks) {
 
     /*for (int ii = 0; ii < 100; ++ii) {
 
@@ -279,7 +279,7 @@ void Simulation::tick(const vector<UnitAction> & actions) {
         }
     }
 
-    for (int i = 0; i < Consts::microticks; ++i) {
+    for (int i = 0; i < Consts::microticks * ticks; ++i) {
 
         bulletMicrotick();
 

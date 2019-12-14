@@ -4,12 +4,30 @@
 #include "Game.hpp"
 
 Bullet::Bullet() { }
-Bullet::Bullet(WeaponType weaponType, int unitId, int playerId, Vec2Double position, Vec2Double velocity, int damage, double size, std::shared_ptr<ExplosionParams> explosionParams) : weaponType(weaponType), unitId(unitId), playerId(playerId), position(position), velocity(velocity), damage(damage), size(size), explosionParams(explosionParams) {
-    leftTop.x = position.x - size / 2.0;
-    leftTop.y = position.y + size / 2.0;
+Bullet::Bullet(
+        WeaponType weaponType,
+        int unitId,
+        int playerId,
+        Vec2Double position,
+        Vec2Double velocity,
+        int damage,
+        double size,
+        std::shared_ptr<ExplosionParams> explosionParams
+        ) :
+        weaponType(weaponType),
+        unitId(unitId),
+        playerId(playerId),
+        position(position),
+        velocity(velocity),
+        damage(damage),
+        size(size),
+        halfSize(size / 2.0),
+        explosionParams(explosionParams) {
+    leftTop.x = position.x - halfSize;
+    leftTop.y = position.y + halfSize;
 
-    rightDown.x = position.x + size / 2.0;
-    rightDown.y = position.y - size / 2.0;
+    rightDown.x = position.x + halfSize;
+    rightDown.y = position.y - halfSize;
 }
 Bullet Bullet::readFrom(InputStream& stream) {
     Bullet result;
@@ -33,12 +51,12 @@ Bullet Bullet::readFrom(InputStream& stream) {
     result.velocity = Vec2Double::readFrom(stream);
     result.damage = stream.readInt();
     result.size = stream.readDouble();
+    result.halfSize = result.size / 2.0;
+    result.leftTop.x = result.position.x - result.halfSize;
+    result.leftTop.y = result.position.y + result.halfSize;
 
-    result.leftTop.x = result.position.x - result.size / 2.0;
-    result.leftTop.y = result.position.y + result.size / 2.0;
-
-    result.rightDown.x = result.position.x + result.size / 2.0;
-    result.rightDown.y = result.position.y - result.size / 2.0;
+    result.rightDown.x = result.position.x + result.halfSize;
+    result.rightDown.y = result.position.y - result.halfSize;
 
 
     if (stream.readBool()) {
@@ -89,8 +107,8 @@ void Bullet::explossion(vector<Unit> &units) const {
         Vec2Double explossionLeft = Vec2Double(position.x - r, position.y + r);
         Vec2Double explossionRight = Vec2Double(position.x + r, position.y - r);
 
-        Vec2Double unitLeft = Vec2Double(unit.position.x - unit.size.x / 2.0, unit.position.y + unit.size.y);
-        Vec2Double unitRight = Vec2Double(unit.position.x + unit.size.x / 2.0, unit.position.y);
+        Vec2Double unitLeft = Vec2Double(unit.position.x - unit.widthHalf, unit.position.y + unit.size.y);
+        Vec2Double unitRight = Vec2Double(unit.position.x + unit.widthHalf, unit.position.y);
 
         if (Geometry::isRectOverlap(explossionLeft, explossionRight, unitLeft, unitRight)) {
             unit.health -= explosionParams.get()->damage;
@@ -104,13 +122,26 @@ bool Bullet::equal(const Bullet &bullet, double eps) const {
 }
 
 
-void Bullet::move(const Vec2Double & vel) {
+void Bullet::move(const Vec2Double & vel) {//@TODO fix this boolshit
     position.x += (vel.x * Game::getProperties()->microticksPerSecond);
     position.y += (vel.y * Game::getProperties()->microticksPerSecond);
 
-    leftTop.x = position.x - size / 2.0;
-    leftTop.y = position.y + size / 2.0;
+    leftTop.x = position.x - halfSize;
+    leftTop.y = position.y + halfSize;
 
-    rightDown.x = position.x + size / 2.0;
-    rightDown.y = position.y - size / 2.0;
+    rightDown.x = position.x + halfSize;
+    rightDown.y = position.y - halfSize;
+}
+
+vector<Vec2Double> Bullet::getFrontPoints() const {
+
+    if (velocity.x >= 0 and velocity.y >= 0) {
+        return {Vec2Double(halfSize, -halfSize) + position, Vec2Double(-halfSize, halfSize) + position, Vec2Double(halfSize, halfSize) + position};
+    } else if (velocity.x >= 0 and velocity.y < 0) {
+        return {Vec2Double(halfSize, halfSize) + position, Vec2Double(-halfSize, -halfSize) + position, Vec2Double(halfSize, -halfSize) + position};
+    } else if (velocity.x < 0 and velocity.y < 0) {
+        return {Vec2Double(halfSize, -halfSize) + position, Vec2Double(-halfSize, halfSize) + position, Vec2Double(-halfSize, -halfSize) + position};
+    } else {
+        return {Vec2Double(halfSize, halfSize) + position, Vec2Double(-halfSize, -halfSize) + position, Vec2Double(-halfSize, halfSize) + position};
+    }
 }

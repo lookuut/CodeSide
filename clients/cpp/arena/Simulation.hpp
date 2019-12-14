@@ -56,7 +56,7 @@ public:
                 const std::vector<LootBox> &lootWeapons,
                 const std::vector<LootBox> &lootMines);
 
-    void tick(const vector<UnitAction> & actions);
+    void tick(const vector<UnitAction> & actions, int ticks);
 
     void bulletMicrotick();
     void mineMicrotick();

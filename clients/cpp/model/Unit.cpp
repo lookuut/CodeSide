@@ -5,6 +5,7 @@
 #include <iostream>
 #include <math.h>
 #include "Game.hpp"
+#include "../utils/Segment.h"
 
 Unit::Unit() { }
 Unit::Unit(
@@ -438,5 +439,75 @@ void Unit::unitVerCollide(Unit &unit) {
             applyJumpCancel();
             unit.applyOnGround();
         }
+    }
+}
+
+optional<int> Unit::crossBulletTick(Bullet &bullet, int microticks, const Vec2Double & unitVelocity) {
+
+    vector<Vec2Double> bullets = bullet.getFrontPoints();
+    int heatWithBulletMicrotick = microticks + 1;
+
+
+    Vec2Double frontUnitPoint;
+    auto unitSegments = setFrontSegments(bullet.velocity, frontUnitPoint);
+
+    for (Vec2Double &bPoint : bullets) {
+        bPoint -= frontUnitPoint;
+
+        if ((bullet.velocity.x - unitVelocity.x) != 0) {//@TODO optimzied it!!!
+            int microticksToHeat = (int)ceil((bPoint.x / (unitVelocity.x - bullet.velocity.x)) * properties->ticksPerSecond * properties->updatesPerTick);
+
+            if (microticksToHeat >= 0 and microticksToHeat <= microticks)  {
+                double timeToHeat = microticksToHeat / (properties->ticksPerSecond * properties->updatesPerTick);
+
+                double unitY = unitVelocity.y * timeToHeat;
+                double segmentStart = unitY + (unitSegments.second > 0 ? 0 : unitSegments.second);
+                double segmentEnd = unitY + (unitSegments.second > 0 ? unitSegments.second : 0);
+                double bulletY = bullet.velocity.y * timeToHeat + bPoint.y;
+
+                if (segmentStart <= bulletY and bulletY <= segmentEnd) {//heat with bullet
+                    heatWithBulletMicrotick = min(heatWithBulletMicrotick, microticksToHeat);
+                }
+            }
+        }
+
+        if ((bullet.velocity.y - unitVelocity.y) != 0) {//@TODO optimzied it!!!
+            int microticksToHeat = (int)ceil((bPoint.y / (unitVelocity.y - bullet.velocity.y)) * properties->ticksPerSecond * properties->updatesPerTick);
+
+            if (microticksToHeat >= 0 and microticksToHeat <= microticks)  {
+                double timeToHeat = microticksToHeat / (properties->ticksPerSecond * properties->updatesPerTick);
+
+                double unitX = unitVelocity.x * timeToHeat;
+                double segmentStart = unitX + (unitSegments.first > 0 ? 0 : unitSegments.first);
+                double segmentEnd = unitX + (unitSegments.first > 0 ? unitSegments.first : 0);
+                double bulletX = bullet.velocity.x * timeToHeat + bPoint.x;
+
+                if (segmentStart <= bulletX and bulletX <= segmentEnd) {//heat with bullet
+                    heatWithBulletMicrotick = min(heatWithBulletMicrotick, microticksToHeat);
+                }
+            }
+        }
+    }
+
+    return (heatWithBulletMicrotick > microticks ? nullopt : optional<int>(heatWithBulletMicrotick));
+}
+
+pair<double, double> Unit::setFrontSegments(const Vec2Double & dir, Vec2Double & frontPoint) const {
+    if (dir.x >= 0 and dir.y >= 0) {
+        frontPoint.x = position.x - widthHalf;
+        frontPoint.y = position.y;
+        return make_pair(size.x, size.y);
+    } else if (dir.x >= 0 and dir.y < 0) {
+        frontPoint.x = position.x - widthHalf;
+        frontPoint.y = position.y + size.y;
+        return make_pair(size.x, -size.y);
+    } else if (dir.x < 0 and dir.y < 0) {
+        frontPoint.x = position.x + widthHalf;
+        frontPoint.y = position.y + size.y;
+        return make_pair(-size.x, -size.y);
+    } else {
+        frontPoint.x = position.x + widthHalf;
+        frontPoint.y = position.y;
+        return make_pair(-size.x, size.y);
     }
 }

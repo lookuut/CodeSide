@@ -171,7 +171,7 @@ double MinMax::simulation(Simulation arena, int deep, int unitIndex) {
     int unitId = arena.units[unitIndex].id;
 
     for (int i = 0; i < Consts::simulationTicks; ++i) {
-        arena.tick(actions);
+        arena.tick(actions, 1);
     }
 
     if (deep >= Consts::maxSimulationDeep) {
@@ -279,8 +279,8 @@ void MinMax::shootLogic(UnitAction &action, const Unit &unit, const Game &game, 
             Vec2Double lowLineFromBulletCenter = aim.rotate(unit.weapon.get()->spread);
             Vec2Double topLineFromBulletCenter = aim.rotate(-unit.weapon.get()->spread);
 
-            Vec2Double bulletLowLineDelta = lowLineFromBulletCenter.getOpponentAngle(unit.weapon.get()->params.bullet.size, false);
-            Vec2Double bulletTopLineDelta = topLineFromBulletCenter.getOpponentAngle(unit.weapon.get()->params.bullet.size, true);
+            Vec2Double bulletLowLineDelta = lowLineFromBulletCenter.getOpponentAngle(unit.weapon.get()->params.bullet.size / 2.0, false);
+            Vec2Double bulletTopLineDelta = topLineFromBulletCenter.getOpponentAngle(unit.weapon.get()->params.bullet.size / 2.0, true);
 
             Vec2Double lowLine = bulletLowLineDelta + lowLineFromBulletCenter;
             Vec2Double topLine = bulletTopLineDelta + topLineFromBulletCenter;

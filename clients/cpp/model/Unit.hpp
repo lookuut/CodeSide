@@ -131,6 +131,8 @@ public:
     void plantMine(vector<Mine> & mines);
     void unitHorCollide(Unit & unit);
     void unitVerCollide(Unit & unit);
+    optional<int> crossBulletTick(Bullet & bullet, int microticks, const Vec2Double & unitVelocity);
+    pair<double, double> setFrontSegments(const Vec2Double & dir, Vec2Double & frontPoint) const;
 };
 
 

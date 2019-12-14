@@ -37,8 +37,18 @@ UnitAction MyStrategy::getAction(const Unit &unit, const Game &game,
             unit.position.distSqr(lootBox.position) < unit.position.distSqr(nearestWeapon->position)) {
             nearestWeapon = &lootBox;
         }
-
     }
+
+
+    Unit testUnit = unit;
+
+    Vec2Double bulletPos(0, -1);
+    Vec2Double bulletVel(0, 3);
+    Bullet bullet(WeaponType::ROCKET_LAUNCHER, testUnit.id, testUnit.playerId, bulletPos, bulletVel, 10, 0, nullptr);
+    testUnit.position = ZERO_VEC_2_DOUBLE;
+    Vec2Double unitVelocity(1, 0);
+
+    optional<int> crossMicrotick = testUnit.crossBulletTick(bullet, 100000, unitVelocity);
 
     chrono::system_clock::time_point start = chrono::system_clock::now();
 
@@ -201,7 +211,7 @@ UnitAction MyStrategy::simulationTest(const Unit &unit, const Game &game, Debug 
         actions[Game::unitIndexById(unit.id)].velocity = properties->unitMaxHorizontalSpeed;
     }
 
-    arena.tick(actions);
+    arena.tick(actions, 1);
 
     return actions[Game::unitIndexById(unit.id)];
 }

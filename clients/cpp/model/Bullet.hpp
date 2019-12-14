@@ -27,6 +27,7 @@ public:
     Vec2Double velocity;
     int damage;
     double size;
+    double halfSize;
     std::shared_ptr<ExplosionParams> explosionParams;
     Bullet();
     Bullet(WeaponType weaponType, int unitId, int playerId, Vec2Double position, Vec2Double velocity, int damage, double size, std::shared_ptr<ExplosionParams> explosionParams);
@@ -38,6 +39,8 @@ public:
 
     bool equal(const Bullet &bullet, double eps) const;
     void move(const Vec2Double & vel);
+    vector<Vec2Double> getFrontPoints() const;
+
 };
 
 #endif
