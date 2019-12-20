@@ -50,7 +50,7 @@ public:
     }
 
     static optional<Vec2Double> doIntersect(const Segment & segment1, const Segment & segment2) {
-        return doIntersect(segment1.point1, segment1.point2, segment2.point1, segment2.point2);
+        return doIntersect(segment1.leftTop, segment1.rightDown, segment2.leftTop, segment2.rightDown);
     }
 
     static std::optional<Vec2Double> doIntersect(const Vec2Double & fLineStart, const Vec2Double & fLineEnd, const Vec2Double & sLineStart, const Vec2Double & sLineEnd)
@@ -106,6 +106,44 @@ public:
             return false;
 
         return true;
+    }
+
+    static optional<double> crossHorSegmentTime(const Vec2Double & point, const Vec2Double & velocity, const Vec2Double & segmentStart, double lenght) {
+
+        double time = (segmentStart.y - point.y) / velocity.y;
+
+        if (time < 0) {
+            return nullopt;
+        }
+
+        double x = time * velocity.x + point.x;
+
+        if ((lenght > 0 and segmentStart.x <= x and x <= segmentStart.x + lenght)
+            or
+            (lenght < 0 and segmentStart.x + lenght <= x and x <= segmentStart.x)) {
+            return time;
+        }
+
+        return nullopt;
+    }
+
+    static optional<double> crossVerSegmentTime(const Vec2Double & point, const Vec2Double & velocity, const Vec2Double & segmentStart, double lenght) {
+
+        double time = (segmentStart.x - point.x) / velocity.x;
+
+        if (time < 0) {
+            return nullopt;
+        }
+
+        double y = time * velocity.y + point.y;
+
+        if ((lenght > 0 and segmentStart.y <= y and y <= segmentStart.y + lenght)
+            or
+            (lenght < 0 and segmentStart.y + lenght <= y and y <= segmentStart.y)) {
+            return time;
+        }
+
+        return nullopt;
     }
 };
 #endif //AICUP2019_GEOMETRY_H

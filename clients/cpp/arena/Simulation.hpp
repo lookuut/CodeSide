@@ -28,6 +28,7 @@
 #include "../model/LootBox.hpp"
 #include "../model/UnitAction.hpp"
 #include "../Consts.h"
+#include "../model/Game.hpp"
 #include <math.h>
 #include <vector>
 
@@ -38,8 +39,14 @@ private:
 public:
     Properties * properties;
     Level * level;
+    Game * game;
+    Debug * debug;
 
-    std::vector<Unit> units;
+    int enemyPoints = 0;
+    int allyPoints = 0;
+
+    vector<Unit> units;
+
     std::vector<Bullet> bullets;
     std::vector<Mine> mines;
 
@@ -47,21 +54,16 @@ public:
     std::vector<LootBox> lootWeapons;
     std::vector<LootBox> lootMines;
 
-    Simulation(Properties * properties, Level * level);
+    Simulation(Game * game, Debug * debug);
 
-    void update(const std::vector<Unit> &units,
-                const std::vector<Bullet> &bullets,
-                const std::vector<Mine> &mines,
-                const std::vector<LootBox> &lootHealthPacks,
-                const std::vector<LootBox> &lootWeapons,
-                const std::vector<LootBox> &lootMines);
+    void update();
 
     void tick(const vector<UnitAction> & actions, int ticks);
 
-    void bulletMicrotick();
+    void moveBullets();
     void mineMicrotick();
     void mineActicate(const Unit & unit);
-    void bulletOverlapWithUnit(Unit & unit);
+    void bulletOverlapWithUnit(Unit &unit);
     void bulletWallOverlap();
     void bulletMineOverlap();
     void shootAction(Unit & unit, const Vec2Double & aim);

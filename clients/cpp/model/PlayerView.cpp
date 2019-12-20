@@ -7,7 +7,7 @@ PlayerView PlayerView::init(InputStream &stream) {
     PlayerView result;
 
     result.myId = stream.readInt();
-    result.game = Game::init(stream);
+    result.game = Game::init(stream, result.myId);
 
     return result;
 }

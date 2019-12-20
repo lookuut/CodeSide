@@ -41,3 +41,7 @@ Vec2Float Vec2Float::operator*(double f) const {
 Vec2Float Vec2Float::rotate(double angle) const{
     return Vec2Float(x * cos(angle) - y * sin(angle), y * cos(angle) + x * sin(angle));
 }
+
+Vec2Double Vec2Float::toDouble() const {
+    return Vec2Double(x, y);
+}

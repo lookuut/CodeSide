@@ -36,3 +36,11 @@ std::string UnitAction::toString() const {
         (plantMine ? "true" : "false") + 
         ")";
 }
+
+
+void UnitAction::update(const Action &action) {
+    this->jump = action.jump;
+    this->jumpDown = action.jumpDown;
+    this->velocity = action.velocity;
+    this->shoot = false;
+}

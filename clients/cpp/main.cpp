@@ -28,48 +28,50 @@ public:
     }
 
     int enemyPlayerId;
-    for (const Player & player : playerView.get()->game->players) {
+    for (const auto & [_, player] : playerView.get()->game->players) {
         if (player.id != playerView->myId) {
             enemyPlayerId = player.id;
         }
     }
 
+    playerView.get()->game->enemyPlayerId = enemyPlayerId;
+    playerView.get()->game->allyPlayerId = playerView.get()->myId;
+
     MyStrategy myStrategy(
-            &playerView.get()->game->properties,
-            &playerView.get()->game->level,
-            playerView.get()->myId,
-            enemyPlayerId,
-            playerView->game->units,
-            playerView->game->unitsIndex
+            playerView->game,
+            &debug
             );
 
     std::unordered_map<int, UnitAction> actions;
-    for (const Unit &unit : playerView->game->units) {
-      if (unit.playerId == playerView->myId) {
-        actions.emplace(std::make_pair(
-                unit.id,
-                myStrategy.getAction(unit, *playerView->game, debug)));
-      }
+    myStrategy.tick(*playerView->game, debug);
+    list<int> & units = playerView->game->aliveAllyUnits;
+    for (const auto & unitId: units) {
+        Unit & unit = playerView->game->units[Game::unitIndexById(unitId)];
+        actions.emplace(std::make_pair(unit.id, myStrategy.getAction(unit)));
     }
     PlayerMessageGame::ActionMessage(Versioned(actions)).writeTo(*outputStream);
     outputStream->flush();
 
     while (true) {
-      auto message = ServerMessageGame::updateTick(*inputStream);
-      const auto& playerView = message.playerView;
-      if (!playerView) {
-        break;
-      }
-      std::unordered_map<int, UnitAction> actions;
-      for (const Unit &unit : playerView->game->units) {
-        if (unit.playerId == playerView->myId) {
-          actions.emplace(std::make_pair(
-              unit.id,
-              myStrategy.getAction(unit, *playerView->game, debug)));
+        auto message = ServerMessageGame::updateTick(*inputStream);
+        const auto& playerView = message.playerView;
+        if (!playerView) {
+            break;
         }
-      }
-      PlayerMessageGame::ActionMessage(Versioned(actions)).writeTo(*outputStream);
-      outputStream->flush();
+
+        std::unordered_map<int, UnitAction> actions;
+
+        myStrategy.tick(*playerView->game, debug);
+
+        list<int> & units = playerView->game->aliveAllyUnits;
+
+        for (const auto & unitId: units) {
+            Unit & unit = playerView->game->units[Game::unitIndexById(unitId)];
+            actions.emplace(std::make_pair(unit.id, myStrategy.getAction(unit)));
+        }
+
+        PlayerMessageGame::ActionMessage(Versioned(actions)).writeTo(*outputStream);
+        outputStream->flush();
     }
   }
 

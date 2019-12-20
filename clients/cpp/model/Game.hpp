@@ -24,28 +24,22 @@ class Game {
 
 private:
     Game();
-    Game(
-            int currentTick,
-            Properties properties,
-            Level level,
-            std::vector<Player> players,
-            std::vector<Unit> units,
-            std::vector<Bullet> bullets,
-            std::vector<Mine> mines
-            );
 
 public:
     int currentTick;
-    int maxUnitId;
+
     Properties properties;
     Level level;
 
-    std::vector<Player> players;
+    int allyPlayerId;
+    int enemyPlayerId;
 
-    std::vector<Unit> units;
-    std::vector<int> unitsIndex = vector<int>(Consts::maxUnitCount, 0);
+    std::map<int, Player> players;
+    vector<Unit> units;
 
-    std::map<int, vector<Unit*>> playerUnits;
+    list<int> aliveAllyUnits;
+    list<int> aliveEnemyUnits;
+
     std::vector<Bullet> bullets;
     std::vector<std::vector<Bullet*>> unitBullets;
     std::vector<Mine> mines;
@@ -54,12 +48,12 @@ public:
     std::vector<LootBox> lootWeapons;
     std::vector<LootBox> lootMines;
 
-    static Game * init(InputStream &stream);
+    static Game * init(InputStream &stream, int allyPlayerId);
     static Game * updateTick(InputStream& stream);
     static Properties * getProperties();
     static Level * getLevel();
 
-    static std::vector<Unit*> & getPlayerUnits(int playerId);
+    static std::list<int> & getPlayerUnits(int playerId);
 
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
@@ -67,8 +61,14 @@ public:
     static std::unique_ptr<Game> game;
 
     inline static int unitIndexById(int id) {
-        return id - 1;
+        return id - 3;
     }
+
+    inline static int allyUnitIndexById(int id) {
+        return (id - 3) / 2;
+    }
+
+    ~Game();
 };
 
 #endif

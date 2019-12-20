@@ -4,7 +4,29 @@
 
 Mine::Mine() { }
 
-Mine::Mine(int playerId, Vec2Double position, Vec2Double size, MineState state, std::shared_ptr<double> timer, double triggerRadius, ExplosionParams explosionParams) : playerId(playerId), position(position), size(size), state(state), timer(timer), triggerRadius(triggerRadius), explosionParams(explosionParams) {
+Mine::Mine(const Mine & mine) :
+playerId(mine.playerId),
+position(mine.position),
+size(mine.size),
+state(mine.state),
+triggerRadius(mine.triggerRadius),
+explosionParams(mine.explosionParams),
+timer(mine.timer)
+{
+    leftTopAngle = Vec2Float(position.x - size.x / 2, position.y + size.y);
+    rightDownAngle = Vec2Float(position.x + size.x / 2, position.y);
+    activateLeftTopAngle = Vec2Float(position.x - triggerRadius - size.x / 2.0, position.y + triggerRadius + size.x);
+    activateRightDownAngle = Vec2Float(position.x + triggerRadius + size.x / 2.0, position.y - triggerRadius);
+}
+
+Mine::Mine(int playerId, Vec2Double position, Vec2Double size, MineState state, double timer, double triggerRadius, ExplosionParams explosionParams) :
+playerId(playerId),
+position(position),
+size(size),
+state(state),
+timer(timer),
+triggerRadius(triggerRadius),
+explosionParams(explosionParams) {
     leftTopAngle = Vec2Float(position.x - size.x / 2, position.y + size.y);
     rightDownAngle = Vec2Float(position.x + size.x / 2, position.y);
     activateLeftTopAngle = Vec2Float(position.x - triggerRadius - size.x / 2.0, position.y + triggerRadius + size.x);
@@ -37,10 +59,9 @@ Mine Mine::readFrom(InputStream& stream) {
         throw std::runtime_error("Unexpected discriminant value");
     }
     if (stream.readBool()) {
-        result.timer = std::shared_ptr<double>(new double());
-        *result.timer = stream.readDouble();
+        result.timer = stream.readDouble();
     } else {
-        result.timer = std::shared_ptr<double>();
+        result.timer = -1.0;
     }
     result.triggerRadius = stream.readDouble();
     result.explosionParams = ExplosionParams::readFrom(stream);
@@ -51,9 +72,9 @@ void Mine::writeTo(OutputStream& stream) const {
     position.writeTo(stream);
     size.writeTo(stream);
     stream.write((int)(state));
-    if (timer) {
+    if (timer >= 0) {
         stream.write(true);
-        stream.write((*timer));
+        stream.write((timer));
     } else {
         stream.write(false);
     }
@@ -73,7 +94,7 @@ std::string Mine::toString() const {
 }
 
 
-void Mine::explode(vector<Unit> &units, vector<Mine> & mines, int currentMineIndex) {
+void Mine::explode(vector<Unit> &units, vector<Mine> & mines, int currentMineIndex, map<int, bool> & deletedMines) {
 
     Vec2Float explodeLeftTop = Vec2Float(position.x - explosionParams.radius, position.y + explosionParams.radius);
     Vec2Float explodeRightDown = Vec2Float(position.x + explosionParams.radius, position.y - explosionParams.radius);
@@ -85,14 +106,16 @@ void Mine::explode(vector<Unit> &units, vector<Mine> & mines, int currentMineInd
         }
     }
 
-    mines.erase(mines.begin() + currentMineIndex);
+    deletedMines[currentMineIndex] = true;
 
     for (int i = mines.size() - 1; i >= 0; --i) {
-        Vec2Float leftTop = Vec2Float(mines[i].position.x - mines[i].size.x / 2.0, mines[i].position.y + mines[i].size.y);
-        Vec2Float rightDown = Vec2Float(mines[i].position.x + mines[i].size.x / 2.0, mines[i].position.y);
+        if (deletedMines.find(i) == deletedMines.end()) {
+            Vec2Float leftTop = Vec2Float(mines[i].position.x - mines[i].size.x / 2.0, mines[i].position.y + mines[i].size.y);
+            Vec2Float rightDown = Vec2Float(mines[i].position.x + mines[i].size.x / 2.0, mines[i].position.y);
 
-        if (Geometry::isRectOverlap(explodeLeftTop, explodeRightDown, leftTop, rightDown)) {
-            mines[i].explode(units, mines, i);
+            if (Geometry::isRectOverlap(explodeLeftTop, explodeRightDown, leftTop, rightDown)) {
+                mines[i].explode(units, mines, i, deletedMines);
+            }
         }
     }
 }
@@ -100,14 +123,6 @@ void Mine::explode(vector<Unit> &units, vector<Mine> & mines, int currentMineInd
 
 bool Mine::equal(const Mine &mine, double eps) const {
 
-    bool a1 = abs(mine.position.x - position.x) < eps;
-    bool a2 = abs(mine.position.y - position.y) < eps;
-    bool a3 = ((mine.timer == nullptr and timer == nullptr) or (mine.timer and timer and abs(*mine.timer.get() - *timer.get()) < eps));
-    bool a4 = mine.state == state;
-
-    if (!(a1 and a2 and a3 and a4)) {
-        cout << "dawdad";
-    }
     return
     abs(mine.position.x - position.x) < eps and abs(mine.position.y - position.y) < eps
     and
@@ -117,6 +132,7 @@ bool Mine::equal(const Mine &mine, double eps) const {
     and
     abs(mine.rightDownAngle.x - rightDownAngle.x) < eps and abs(mine.rightDownAngle.y - rightDownAngle.y) < eps
     and
-    ((mine.timer == nullptr and timer == nullptr) or (mine.timer != nullptr and timer != nullptr and abs(*mine.timer.get() - *timer.get()) < eps))
-    and mine.state == state;
+    abs(mine.timer - timer) < eps
+    and
+    mine.state == state;
 }

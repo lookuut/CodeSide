@@ -24,6 +24,8 @@ public:
     float sqrLen() const {
         return (x * x + y * y);
     }
+
+    Vec2Double toDouble() const;
 };
 
 #endif

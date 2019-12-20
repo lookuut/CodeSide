@@ -7,13 +7,16 @@
 
 class Consts {
 public:
-    static constexpr double magicConst = 1.0e-9;
     static constexpr double eps = 1.0e-9;
-    static constexpr int simulationTicks = 10;
-    static constexpr int maxSimulationDeep = 4;
-    static constexpr int microticks = 100;
+    static constexpr int simulationTicks = 4;
+    static constexpr int maxSimulationDeep = 7;
+    static constexpr int microticks = 1;
     static constexpr double noLastAngleValue = -100.0;
     static constexpr int maxUnitCount = 4;
+    static constexpr int weaponTargetType = 1;
+    static constexpr int healthPackTargetType = 2;
+    static constexpr int enemyTargetType = 1;
+    static constexpr int simulationNodes = 3;
 };
 //      "ticks_per_second": 60,
 //      "updates_per_tick": 100,wwwwwa

@@ -4,20 +4,14 @@ unique_ptr<Game> Game::game;
 
 Game::Game() { }
 
-Game::Game(
-        int currentTick,
-        Properties properties,
-        Level level,
-        std::vector<Player> players,
-        std::vector<Unit> units,
-        std::vector<Bullet> bullets,
-        std::vector<Mine> mines
-        ) : currentTick(currentTick), properties(properties), level(level), players(players), units(units), bullets(bullets), mines(mines){ }
+Game::~Game() {
+}
 
 
-Game * Game::init(InputStream &stream) {
+Game * Game::init(InputStream &stream, int allyPlayerId) {
     game = make_unique<Game>(Game());
-    
+
+    game->allyPlayerId = allyPlayerId;
     game->currentTick = stream.readInt();
 
     game->properties = Properties::readFrom(stream);
@@ -29,28 +23,57 @@ Game * Game::init(InputStream &stream) {
     game->level.buildWalls();
     game->level.buildStandablePlaces();
 
-    game->players = std::vector<Player>(stream.readInt());
-    game->playerUnits = map<int, vector<Unit*>>();
+    int playersCount = stream.readInt();
 
-    for (size_t i = 0; i < game->players.size(); i++) {
-        game->players[i] = Player::readFrom(stream);
-        game->playerUnits[game->players[i].id] = vector<Unit*>();
+    game->players = std::map<int, Player>();
+
+    for (size_t i = 0; i < playersCount; i++) {
+
+        int playerId = stream.readInt();
+        int score = stream.readInt();
+
+        Player player(playerId, score);
+
+        game->players.insert(make_pair(playerId, player));
+        if (playerId != allyPlayerId) {
+            game->enemyPlayerId = playerId;
+        }
     }
 
-    game->units = std::vector<Unit>(stream.readInt());
 
-    for (size_t i = 0; i < game->units.size(); i++) {
-        game->units[i].init(stream, &game->properties, &game->level);
-        game->unitsIndex[Game::unitIndexById(game->units[i].id)] = i;
+    int unitSize = stream.readInt();
 
-        game->playerUnits[game->units[i].playerId].push_back(&game->units[i]);
-        game->maxUnitId = max(game->units[i].id, game->maxUnitId);
+    Unit defaultUnit = Unit();
+
+    defaultUnit.properties = &game->properties;
+    defaultUnit.level = &game->level;
+
+    game->units = vector<Unit>(unitSize, defaultUnit);
+    game->aliveAllyUnits = list<int>();
+    game->aliveEnemyUnits = list<int>();
+
+    for (int i = 0; i < unitSize; i++) {
+        int playerId = stream.readInt();
+        int id = stream.readInt();
+
+        game->units[Game::unitIndexById(id)].id = id;
+        game->units[Game::unitIndexById(id)].playerId = playerId;
+        game->units[Game::unitIndexById(id)].init(stream, &game->properties, &game->level);
+
+        if (playerId == game->allyPlayerId) {
+            game->aliveAllyUnits.push_back(id);
+        } else {
+            game->aliveEnemyUnits.push_back(id);
+        }
     }
+
     game->bullets = std::vector<Bullet>(stream.readInt());
+
     for (size_t i = 0; i < game->bullets.size(); i++) {
         game->bullets[i] = Bullet::readFrom(stream);
     }
-    game->unitBullets = vector(game->maxUnitId + 1, vector<Bullet*>());
+
+    game->unitBullets = vector(game->properties.teamSize * 2, vector<Bullet*>());
     game->mines = std::vector<Mine>(stream.readInt());
     for (size_t i = 0; i < game->mines.size(); i++) {
         game->mines[i] = Mine::readFrom(stream);
@@ -88,28 +111,37 @@ Game * Game::updateTick(InputStream &stream) {
     Properties::readFrom(stream);
     Level::readFrom(stream);
 
-    game->players = std::vector<Player>(stream.readInt());
-    game->playerUnits = map<int, vector<Unit*>>();
+    int playerCount = stream.readInt();;
 
-    for (size_t i = 0; i < game->players.size(); i++) {
-        game->players[i] = Player::readFrom(stream);
-        game->playerUnits[game->players[i].id] = vector<Unit*>();
+    for (size_t i = 0; i < playerCount; i++) {
+        int playerId = stream.readInt();
+        game->players[playerId].update(stream);
     }
 
-    stream.readInt();
+    game->aliveAllyUnits = list<int>();
+    game->aliveEnemyUnits = list<int>();
 
-    for (size_t i = 0; i < game->units.size(); i++) {
-        stream.readInt();//playerId
+    int unitSize = stream.readInt();
+
+    for (size_t i = 0; i < unitSize; i++) {
+        int playerId = stream.readInt();//playerId
         int unitId = stream.readInt();
-        game->units[game->unitsIndex[Game::unitIndexById(unitId)]].update(stream);
-        game->playerUnits[game->units[i].playerId].push_back(&game->units[i]);
+
+        Unit & unit = game->units[Game::unitIndexById(unitId)];
+        unit.update(stream);
+
+        if (playerId == game->allyPlayerId) {
+            game->aliveAllyUnits.push_back(unitId);
+        } else {
+            game->aliveEnemyUnits.push_back(unitId);
+        }
     }
 
     game->bullets = std::vector<Bullet>(stream.readInt());
 
     for (size_t i = 0; i < game->bullets.size(); i++) {
         game->bullets[i] = Bullet::readFrom(stream);
-        game->unitBullets[game->bullets[i].unitId].push_back(&game->bullets[i]);
+        game->unitBullets[Game::unitIndexById(game->bullets[i].unitId)].push_back(&game->bullets[i]);
     }
 
     game->mines = std::vector<Mine>(stream.readInt());
@@ -143,8 +175,11 @@ Game * Game::updateTick(InputStream &stream) {
     return Game::game.get();
 }
 
-vector<Unit*>& Game::getPlayerUnits(int playerId) {
-    return Game::game->playerUnits[playerId];
+list<int> & Game::getPlayerUnits(int playerId) {
+    if (playerId == Game::game->allyPlayerId) {
+        return Game::game->aliveAllyUnits;
+    }
+    return Game::game->aliveEnemyUnits;
 }
 
 void Game::writeTo(OutputStream& stream) const {
@@ -152,11 +187,13 @@ void Game::writeTo(OutputStream& stream) const {
     properties.writeTo(stream);
     level.writeTo(stream);
     stream.write((int)(players.size()));
-    for (const Player& playersElement : players) {
-        playersElement.writeTo(stream);
+
+    for (const auto & [_, player] : players) {
+        player.writeTo(stream);
     }
+
     stream.write((int)(units.size()));
-    for (const Unit& unitsElement : units) {
+    for (auto unitsElement : units) {
         unitsElement.writeTo(stream);
     }
     stream.write((int)(bullets.size()));

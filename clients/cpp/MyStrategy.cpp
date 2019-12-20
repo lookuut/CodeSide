@@ -14,51 +14,34 @@ template <typename T> int sgn(T val) {
 
 using namespace std;
 
-MyStrategy::MyStrategy(Properties * properties, Level * level, int playerId, int enemyPlayerId, const vector<Unit> & units, const vector<int> & unitsIndex):
-properties(properties),
-level(level),
-allyPlayerId(playerId),
-enemyPlayerId(enemyPlayerId),
-arena(properties, level),
-unitsIndex(unitsIndex),
-minMax(properties, level, playerId, enemyPlayerId, units, unitsIndex)
+MyStrategy::MyStrategy(
+        Game * game,
+        Debug * debug
+        ):
+properties(&game->properties),
+level(&game->level),
+allyPlayerId(game->allyPlayerId),
+enemyPlayerId(game->enemyPlayerId),
+arena(game, debug),
+minMax(game, debug)
 {
     actions = vector<UnitAction>(Consts::maxUnitCount, UnitAction());
 }
 
-UnitAction MyStrategy::getAction(const Unit &unit, const Game &game,
-                                 Debug &debug) {
-    //return simulationTest(unit, game, debug);
-
-    const LootBox *nearestWeapon = nullptr;
-
-    for (const LootBox &lootBox : game.lootWeapons) {
-        if (nearestWeapon == nullptr ||
-            unit.position.distSqr(lootBox.position) < unit.position.distSqr(nearestWeapon->position)) {
-            nearestWeapon = &lootBox;
-        }
-    }
-
-
-    Unit testUnit = unit;
-
-    Vec2Double bulletPos(0, -1);
-    Vec2Double bulletVel(0, 3);
-    Bullet bullet(WeaponType::ROCKET_LAUNCHER, testUnit.id, testUnit.playerId, bulletPos, bulletVel, 10, 0, nullptr);
-    testUnit.position = ZERO_VEC_2_DOUBLE;
-    Vec2Double unitVelocity(1, 0);
-
-    optional<int> crossMicrotick = testUnit.crossBulletTick(bullet, 100000, unitVelocity);
-
+void MyStrategy::tick(const Game &game, Debug &debug) {
     chrono::system_clock::time_point start = chrono::system_clock::now();
 
-    UnitAction & action = minMax.getBestAction(unit, game, debug);
+    minMax.generateBestAction(game, debug);
 
     chrono::system_clock::time_point end = chrono::system_clock::now();
     long micros = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     cout << "Tick " << game.currentTick << " perfomance " << micros << endl;
+}
 
-    return action;
+
+UnitAction MyStrategy::getAction(const Unit &unit) {
+    //return simulationTest(unit, game, debug);
+    return minMax.getBestAction(unit);
 }
 
 bool MyStrategy::simulationEqualTests(const Unit &simulatedUnit, const Unit &unit, const Game &game) const {
@@ -113,10 +96,11 @@ UnitAction MyStrategy::simulationTest(const Unit &unit, const Game &game, Debug 
     cout.precision(17);
 
     if (game.currentTick == 0) {
-        arena.update(game.units, game.bullets, game.mines, game.lootHealthPacks, game.lootWeapons, game.lootMines);
+        //arena.update(game.allyUnits, game.bullets, game.mines, game.lootHealthPacks, game.lootWeapons, game.lootMines);
     }
 
-    Unit & simulatedUnit = arena.units[unitsIndex[Game::unitIndexById(unit.id)]];
+    //Unit & simulatedUnit = arena.allyUnits[unitsIndex[Game::unitIndexById(unit.id)]];
+    Unit  simulatedUnit;
 
     if (!simulationEqualTests(simulatedUnit, unit, game)) {
         cout << "Simulation not equal";
@@ -211,7 +195,26 @@ UnitAction MyStrategy::simulationTest(const Unit &unit, const Game &game, Debug 
         actions[Game::unitIndexById(unit.id)].velocity = properties->unitMaxHorizontalSpeed;
     }
 
-    arena.tick(actions, 1);
+    //arena.tick(actions, 1);
 
     return actions[Game::unitIndexById(unit.id)];
 }
+
+/*
+    Unit testUnit(unit);
+    testUnit.position.x = 32.820000000005315;
+    testUnit.position.y = 19.503333333336659;
+
+    Vec2Double unitVelocity(-9.9999999999998579, -10.000000000000071);
+
+    Bullet bullet(
+            WeaponType::ASSAULT_RIFLE,
+            1,
+            1,
+            Vec2Double(31.406203413355335, 19.635309864153797),
+            Vec2Double(49.90902560021491, 3.0148239811126674),
+            5,
+            0.20000000000000001,
+            nullptr);
+
+    testUnit.crossBulletTick(bullet, 100, unitVelocity, testUnit.position);*/

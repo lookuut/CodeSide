@@ -2,12 +2,11 @@
 
 Player::Player() { }
 Player::Player(int id, int score) : id(id), score(score) { }
-Player Player::readFrom(InputStream& stream) {
-    Player result;
-    result.id = stream.readInt();
-    result.score = stream.readInt();
-    return result;
+
+void Player::update(InputStream& stream) {
+    score = stream.readInt();
 }
+
 void Player::writeTo(OutputStream& stream) const {
     stream.write(id);
     stream.write(score);

@@ -8,6 +8,17 @@
 
 #include "Simulation.hpp"
 #include "../model/Game.hpp"
+#include "Target.h"
+
+
+typedef struct Tree {
+
+    double evaluationValue;
+    short actionType;
+    short maxEvalValueActionIndex;
+    vector<Tree*> nodes;
+} Tree;
+
 
 class MinMax {
 
@@ -16,28 +27,42 @@ private:
 
     int enemyPlayerId;
     int allyPlayerId;
-    vector<int> unitsIndex;
-
     Level * level;
     Properties * properties;
+    Game * game;
+    Debug * debug;
+    vector<UnitAction> allyActions;
 
-    vector<UnitAction> actions;
-    UnitAction bestAction;
+    int simulationDeep = Consts::maxSimulationDeep;
+    int simulationTicks = Consts::simulationTicks;
+
+    vector<vector<UnitAction>> unitBestActions;
+    vector<double> unitMaxEvaluationValue;
+    vector<vector<UnitAction>> currentUnitBestActions;
+    vector<vector<Action>> unitAction;
+    vector<vector<Action>> verActionVariances;
+    Unit bestSimulatedUnitState;
+    Tree tree;
+
+
 public:
 
+
     MinMax(
-            Properties * properties,
-            Level * level,
-            int playerId,
-            int enemyPlayerId,
-            const vector<Unit> & units,
-            const vector<int> & unitsIndex
+            Game * game,
+            Debug * debug
     );
 
-    UnitAction & getBestAction(const Unit & unit, const Game & game, Debug & debug);
-    double simulation(Simulation arena, int deep, int unitIndex);
-    void shootLogic(UnitAction &action, const Unit &unit, const Game &game, Debug &debug);
+    UnitAction getBestAction(const Unit & unit);
+    void generateBestAction(const Game & game, Debug & debug);
+
+    double simulation(Simulation arena, int deep, int simulationUnitId, Tree * tree, int simulatedUnitId);
+    void shootLogic(UnitAction &action, const Unit &unit);
     double evaluation(const Unit & unit, int tick);
+
+    void defineTarget(Unit & unit);
+
+    bool refreshBestSimulation();
 };
 
 

@@ -10,7 +10,9 @@ public:
     int score;
     Player();
     Player(int id, int score);
-    static Player readFrom(InputStream& stream);
+
+    void update(InputStream& stream);
+
     void writeTo(OutputStream& stream) const;
     bool operator ==(const Player& other) const;
     std::string toString() const;

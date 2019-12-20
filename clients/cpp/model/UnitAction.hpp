@@ -6,6 +6,12 @@
 #include <stdexcept>
 #include "Vec2Double.hpp"
 
+typedef struct Action{
+    bool jump;
+    bool jumpDown;
+    double velocity;
+} Action;
+
 class UnitAction {
 public:
     double velocity = 0;
@@ -18,6 +24,8 @@ public:
     bool plantMine = false;
     UnitAction();
     UnitAction(double velocity, bool jump, bool jumpDown, Vec2Double aim, bool shoot, bool reload, bool swapWeapon, bool plantMine);
+
+    void update(const Action & action);
     static UnitAction readFrom(InputStream& stream);
     void writeTo(OutputStream& stream) const;
     std::string toString() const;

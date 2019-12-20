@@ -2,6 +2,7 @@
 #include "../utils/Geometry.h"
 #include "Unit.hpp"
 #include "Game.hpp"
+#include <math.h>
 
 Bullet::Bullet() { }
 Bullet::Bullet(
@@ -28,6 +29,11 @@ Bullet::Bullet(
 
     rightDown.x = position.x + halfSize;
     rightDown.y = position.y - halfSize;
+
+    updateFrontPoint();
+    widthBorderSign = (frontPoint.x > position.x) ? -1 : 1;
+    heightBorderSign = (frontPoint.y > position.y) ? -1 : 1;
+
 }
 Bullet Bullet::readFrom(InputStream& stream) {
     Bullet result;
@@ -57,7 +63,7 @@ Bullet Bullet::readFrom(InputStream& stream) {
 
     result.rightDown.x = result.position.x + result.halfSize;
     result.rightDown.y = result.position.y - result.halfSize;
-
+    result.updateFrontPoint();
 
     if (stream.readBool()) {
         result.explosionParams = std::shared_ptr<ExplosionParams>(new ExplosionParams());
@@ -95,24 +101,22 @@ std::string Bullet::toString() const {
         ")";
 }
 
-void Bullet::explossion(vector<Unit> &units) const {
+void Bullet::explossion(Unit & unit, const Vec2Double & unitPosition) const {
 
     if (weaponType != WeaponType::ROCKET_LAUNCHER) {
         return;
     }
 
-    for (Unit & unit : units) {
-        double r = explosionParams.get()->radius;
+    double r = explosionParams.get()->radius;
 
-        Vec2Double explossionLeft = Vec2Double(position.x - r, position.y + r);
-        Vec2Double explossionRight = Vec2Double(position.x + r, position.y - r);
+    Vec2Double explossionLeft = Vec2Double(position.x - r, position.y + r);
+    Vec2Double explossionRight = Vec2Double(position.x + r, position.y - r);
 
-        Vec2Double unitLeft = Vec2Double(unit.position.x - unit.widthHalf, unit.position.y + unit.size.y);
-        Vec2Double unitRight = Vec2Double(unit.position.x + unit.widthHalf, unit.position.y);
+    Vec2Double unitLeft = Vec2Double(unitPosition.x - unit.widthHalf, unitPosition.y + unit.size.y);
+    Vec2Double unitRight = Vec2Double(unitPosition.x + unit.widthHalf, unitPosition.y);
 
-        if (Geometry::isRectOverlap(explossionLeft, explossionRight, unitLeft, unitRight)) {
-            unit.health -= explosionParams.get()->damage;
-        }
+    if (Geometry::isRectOverlap(explossionLeft, explossionRight, unitLeft, unitRight)) {
+        unit.health -= explosionParams.get()->damage;
     }
 }
 
@@ -122,26 +126,90 @@ bool Bullet::equal(const Bullet &bullet, double eps) const {
 }
 
 
-void Bullet::move(const Vec2Double & vel) {//@TODO fix this boolshit
-    position.x += (vel.x * Game::getProperties()->microticksPerSecond);
-    position.y += (vel.y * Game::getProperties()->microticksPerSecond);
+void Bullet::move(const Vec2Double & vel, int microTicks, Properties * properties) {//@TODO fix this boolshit
+    position.x += (vel.x * microTicks / (properties->updatesPerTick * properties->ticksPerSecond));
+    position.y += (vel.y * microTicks / (properties->updatesPerTick * properties->ticksPerSecond));
 
     leftTop.x = position.x - halfSize;
     leftTop.y = position.y + halfSize;
 
     rightDown.x = position.x + halfSize;
     rightDown.y = position.y - halfSize;
+    updateFrontPoint();
 }
 
-vector<Vec2Double> Bullet::getFrontPoints() const {
+int Bullet::overlapWithSegmentMicroTicks(const Segment &segment, int microticks, Properties *properties) const {
 
+    Vec2Double rectBackPoint = segment.rectBackPoint(velocity);
+
+    double width = segment.rightDown.x - segment.leftTop.x;
+    double height = segment.leftTop.y - segment.rightDown.y;
+
+    int minTime = microticks + 1;
+
+    vector<Vec2Double> bulletPoints = {
+            frontPoint,
+            Vec2Double(frontPoint.x, frontPoint.y + size * heightBorderSign),
+            Vec2Double(frontPoint.x + size * widthBorderSign, frontPoint.y)
+    };
+
+    for (Vec2Double & frontPoint : bulletPoints) {
+
+        if (abs(height) <= Consts::eps) {
+            if (auto horTime = Geometry::crossHorSegmentTime(frontPoint, velocity, rectBackPoint, (rectBackPoint.x > leftTop.x) ? -width : width)) {
+                minTime = min((int)floor(horTime.value() * properties->ticksPerSecond * properties->updatesPerTick) , minTime);
+            }
+        } else {
+            if (auto verTime = Geometry::crossVerSegmentTime(frontPoint, velocity, rectBackPoint, (rectBackPoint.y > rightDown.y) ? -height : height)) {
+                minTime = min((int)floor(verTime.value() * properties->ticksPerSecond * properties->updatesPerTick), minTime);
+            }
+        }
+    }
+
+    return minTime;
+}
+
+
+int Bullet::overlapWithRectMicroTicks(const Segment &rect, int microticks, Properties *properties) const {
+
+    Vec2Double rectBackPoint = rect.rectBackPoint(velocity);
+
+    double width = rect.rightDown.x - rect.leftTop.x;
+    double height = rect.leftTop.y - rect.rightDown.y;
+
+    int minTime = microticks + 1;
+
+    vector<Vec2Double> bulletPoints = {
+            frontPoint,
+            Vec2Double(frontPoint.x, frontPoint.y + size * heightBorderSign),
+            Vec2Double(frontPoint.x + size * widthBorderSign, frontPoint.y)
+    };
+
+    for (Vec2Double & frontPoint : bulletPoints) {
+        if (auto horTime = Geometry::crossHorSegmentTime(frontPoint, velocity, rectBackPoint, (rectBackPoint.x > leftTop.x) ? -width : width)) {
+            minTime = min((int)floor(horTime.value() * properties->ticksPerSecond * properties->updatesPerTick) , minTime);
+        }
+
+        if (auto verTime = Geometry::crossVerSegmentTime(frontPoint, velocity, rectBackPoint, (rectBackPoint.y > rightDown.y) ? -height : height)) {
+            minTime = min((int)floor(verTime.value() * properties->ticksPerSecond * properties->updatesPerTick), minTime);
+        }
+    }
+
+    return minTime;
+}
+
+void Bullet::updateFrontPoint() {
     if (velocity.x >= 0 and velocity.y >= 0) {
-        return {Vec2Double(halfSize, -halfSize) + position, Vec2Double(-halfSize, halfSize) + position, Vec2Double(halfSize, halfSize) + position};
+        frontPoint.x = position.x + halfSize;
+        frontPoint.y = position.y + halfSize;
     } else if (velocity.x >= 0 and velocity.y < 0) {
-        return {Vec2Double(halfSize, halfSize) + position, Vec2Double(-halfSize, -halfSize) + position, Vec2Double(halfSize, -halfSize) + position};
+        frontPoint.x = position.x + halfSize;
+        frontPoint.y = position.y - halfSize;
     } else if (velocity.x < 0 and velocity.y < 0) {
-        return {Vec2Double(halfSize, -halfSize) + position, Vec2Double(-halfSize, halfSize) + position, Vec2Double(-halfSize, -halfSize) + position};
+        frontPoint.x = position.x - halfSize;
+        frontPoint.y = position.y - halfSize;
     } else {
-        return {Vec2Double(halfSize, halfSize) + position, Vec2Double(-halfSize, -halfSize) + position, Vec2Double(-halfSize, halfSize) + position};
+        frontPoint.x = position.x - halfSize;
+        frontPoint.y = position.y + halfSize;
     }
 }

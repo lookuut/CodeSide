@@ -14,12 +14,11 @@ private:
 
     Simulation arena;
 
-    int enemyPlayerId;
-    int allyPlayerId;
-    vector<int> unitsIndex;
+    int enemyPlayerId = 0;
+    int allyPlayerId = 0;
 
-    Level * level;
-    Properties * properties;
+    Level * level = NULL;
+    Properties * properties = NULL;
 
     vector<UnitAction> actions;
 
@@ -28,15 +27,13 @@ private:
 public:
 
   MyStrategy(
-          Properties * properties,
-          Level * level,
-          int playerId,
-          int enemyPlayerId,
-          const vector<Unit> & units,
-          const vector<int> & unitsIndex
+          Game * game,
+          Debug * debug
           );
 
-  UnitAction getAction(const Unit &unit, const Game &game, Debug &debug);
+
+  void tick(const Game &game, Debug &debug);
+  UnitAction getAction(const Unit &unit);
 
   UnitAction simulationTest(const Unit &unit, const Game &game, Debug &debug);
   bool simulationEqualTests(const Unit & simulatedUnit, const Unit & unit, const Game & game) const;

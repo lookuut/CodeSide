@@ -30,11 +30,12 @@ class Unit {
 private:
     void updateTilePos();
 
+public:
+
     Properties * properties;
     Level * level;
 
-public:
-
+    bool isAlive = false;
     int playerId;
     int id;
     int health;
@@ -45,6 +46,8 @@ public:
 
     Vec2Float leftTop;
     Vec2Float rightDown;
+
+    int onGroundLadderTicks = 0;
 
     int posTileX;
     int posTileY;
@@ -86,6 +89,7 @@ public:
             std::shared_ptr<Weapon> weapon
             );
 
+    Unit(const Unit & unit);
 
     bool equal(const Unit &unit, double eps) const;
 
@@ -131,8 +135,18 @@ public:
     void plantMine(vector<Mine> & mines);
     void unitHorCollide(Unit & unit);
     void unitVerCollide(Unit & unit);
-    optional<int> crossBulletTick(Bullet & bullet, int microticks, const Vec2Double & unitVelocity);
-    pair<double, double> setFrontSegments(const Vec2Double & dir, Vec2Double & frontPoint) const;
+    int crossBulletTick(Bullet & bullet, int microticks, const Vec2Double & unitVelocity, const Vec2Double & position);
+    pair<double, double> setFrontSegments(const Vec2Double & dir, Vec2Double & frontPoint, const Vec2Double & position) const;
+
+    int crossWithFrontPoint(const Vec2Double &frontUnitPoint,
+                            const vector<Vec2Double> & bullets,
+                            const Bullet & bullet,
+                            const Vec2Double & unitVelocity,
+                            const pair<double, double> & unitSegments,
+                            int microticks);
+
+    int horFirstEvent(double velocity, int microTicksLimit, const Vec2Double & position) const;
+    int verFirstEvent(double velocity, int microTicksLimit, const Vec2Double & position, const UnitAction & action) const;
 };
 
 

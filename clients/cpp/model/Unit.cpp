@@ -7,6 +7,11 @@
 #include "Game.hpp"
 #include "../utils/Segment.h"
 
+
+template <typename T> int sgn(T val) {
+    return (T(0) <= val) - (val < T(0));
+}
+
 Unit::Unit() { }
 Unit::Unit(
         int playerId,
@@ -29,13 +34,51 @@ Unit::Unit(
     rightDown.x = position.x + size.x / 2.0;
     rightDown.y = position.y;
     widthHalf = size.x / 2.0;
+    onGroundLadderTicks = 0;
+}
+
+Unit::Unit(const Unit &unit) :
+playerId(unit.playerId),
+id(unit.id),
+health(unit.health),
+position(unit.position),
+prevPosition(unit.prevPosition),
+size(unit.size),
+jumpState(unit.jumpState),
+walkedRight(unit.walkedRight),
+stand(unit.stand),
+level(unit.level),
+properties(unit.properties),
+onGround(unit.onGround),
+onLadder(unit.onLadder),
+mines(unit.mines),
+onGroundLadderTicks(unit.onGroundLadderTicks)
+{
+    leftTop.x = position.x - size.x / 2.0;
+    leftTop.y = position.y + size.y;
+
+    rightDown.x = position.x + size.x / 2.0;
+    rightDown.y = position.y;
+    widthHalf = size.x / 2.0;
+
+    if (unit.weapon) {
+        weapon = make_shared<Weapon>(
+                Weapon(
+                        unit.weapon.get()->type,
+                        unit.weapon.get()->params,
+                        unit.weapon.get()->magazine,
+                        unit.weapon.get()->wasShooting,
+                        unit.weapon.get()->spread,
+                        unit.weapon.get()->fireTimer,
+                        unit.weapon.get()->lastAngle,
+                        unit.weapon.get()->lastAngle));
+    }
+    updateTilePos();
 }
 
 void Unit::init(InputStream &stream, Properties *properties, Level *level) {
-    playerId = stream.readInt();
     this->properties = properties;
     this->level = level;
-    id = stream.readInt();
     health = stream.readInt();
     position = Vec2Double::readFrom(stream);
     size = Vec2Double::readFrom(stream);
@@ -46,7 +89,7 @@ void Unit::init(InputStream &stream, Properties *properties, Level *level) {
     onLadder = stream.readBool();
     mines = stream.readInt();
     widthHalf = size.x / 2.0;
-
+    onGroundLadderTicks = 0;
     updateTilePos();
 
     if (stream.readBool()) {
@@ -58,6 +101,7 @@ void Unit::init(InputStream &stream, Properties *properties, Level *level) {
 }
 
 void Unit::update(InputStream &stream) {
+    isAlive = true;
     health = stream.readInt();
     position = Vec2Double::readFrom(stream);
     Vec2Double::readFrom(stream);
@@ -67,7 +111,7 @@ void Unit::update(InputStream &stream) {
     onGround = stream.readBool();
     onLadder = stream.readBool();
     mines = stream.readInt();
-
+    onGroundLadderTicks = 0;
     updateTilePos();
 
     if (stream.readBool()) {
@@ -144,7 +188,7 @@ void Unit::updateMoveState() {
 }
 
 bool Unit::equal(const Unit &unit, double eps) const {
-    return unit.mines == mines and unit.onLadder == onLadder and unit.health == health /*and unit.onGround == onGround*/ and (unit.position - position).len() <= eps and unit.jumpState.equal(jumpState , eps);
+    return unit.mines == mines and unit.onLadder == onLadder and unit.health == health and (unit.position - position).len() <= eps and unit.jumpState.equal(jumpState , eps);
 }
 
 
@@ -406,7 +450,7 @@ void Unit::plantMine(vector<Mine> &mines) {
                 position,
                 properties->mineSize,
                 MineState::PREPARING,
-                shared_ptr<double>(new double(properties->minePrepareTime)),
+                properties->minePrepareTime,
                 properties->mineTriggerRadius,
                 properties->mineExplosionParams
                 );
@@ -417,13 +461,47 @@ void Unit::plantMine(vector<Mine> &mines) {
     }
 }
 
-void Unit::unitHorCollide(Unit & unit) {
+void Unit:: unitHorCollide(Unit & unit) {
 
     if (Geometry::isRectOverlap(unit.leftTop, unit.rightDown, leftTop, rightDown)) {
-        if (position.x > unit.position.x) {
-            position.x = unit.position.x + unit.widthHalf;
+        if (unit.position.x < position.x) {
+            position.x = unit.position.x + 2 * widthHalf;
+
+            int rightTileX = (int)(position.x + widthHalf);
+
+            Tile upTile = level->tiles[rightTileX][topTileY];
+            Tile meanTile = level->tiles[rightTileX][meanTileY];
+            Tile downTile = level->tiles[rightTileX][posTileY];
+
+            if (upTile == Tile::WALL or meanTile == Tile::WALL or downTile == Tile::WALL) {
+                position.x = rightTileX - widthHalf;
+                unit.position.x = position.x - 2 * widthHalf;
+
+                updateTilePos();
+                updateMoveState();
+
+                unit.updateTilePos();
+                unit.updateMoveState();
+             }
+
         } else {
-            position.x = unit.position.x - unit.widthHalf;
+            position.x = unit.position.x - 2 * widthHalf;
+
+            int leftTileX = (int)(position.x - widthHalf);
+
+            Tile upTile = level->tiles[leftTileX][topTileY];
+            Tile meanTile = level->tiles[leftTileX][meanTileY];
+            Tile downTile = level->tiles[leftTileX][posTileY];
+
+            if (upTile == Tile::WALL or meanTile == Tile::WALL or downTile == Tile::WALL) {
+                position.x = leftTileX + 1.0 + widthHalf;
+                unit.position.x = position.x + 2 * widthHalf;
+
+                updateTilePos();
+                updateMoveState();
+                unit.updateTilePos();
+                unit.updateMoveState();
+            }
         }
     }
 }
@@ -442,20 +520,36 @@ void Unit::unitVerCollide(Unit &unit) {
     }
 }
 
-optional<int> Unit::crossBulletTick(Bullet &bullet, int microticks, const Vec2Double & unitVelocity) {
+int Unit::crossBulletTick(Bullet &bullet, int microticks, const Vec2Double & unitVelocity, const Vec2Double & position) {
 
-    vector<Vec2Double> bullets = bullet.getFrontPoints();
+    vector<Vec2Double> bullets = {
+            Vec2Double(bullet.halfSize, -bullet.halfSize) + bullet.position,
+            Vec2Double(-bullet.halfSize, bullet.halfSize) + bullet.position,
+            Vec2Double(bullet.halfSize, bullet.halfSize) + bullet.position,
+            Vec2Double(-bullet.halfSize, -bullet.halfSize) + bullet.position
+    };
+
+    return min(
+            crossWithFrontPoint(Vec2Double(position.x + widthHalf, position.y + size.y), bullets, bullet, unitVelocity, make_pair(-size.x, -size.y) , microticks),
+            crossWithFrontPoint(Vec2Double(position.x - widthHalf, position.y), bullets, bullet, unitVelocity, make_pair(size.x, size.y) , microticks)
+            );
+}
+
+int Unit::crossWithFrontPoint(
+        const Vec2Double &frontUnitPoint,
+        const vector<Vec2Double> & bullets,
+        const Bullet & bullet,
+        const Vec2Double & unitVelocity,
+        const pair<double, double> & unitSegments,
+        int microticks
+        ) {
     int heatWithBulletMicrotick = microticks + 1;
 
-
-    Vec2Double frontUnitPoint;
-    auto unitSegments = setFrontSegments(bullet.velocity, frontUnitPoint);
-
-    for (Vec2Double &bPoint : bullets) {
+    for (Vec2Double bPoint : bullets) {
         bPoint -= frontUnitPoint;
 
         if ((bullet.velocity.x - unitVelocity.x) != 0) {//@TODO optimzied it!!!
-            int microticksToHeat = (int)ceil((bPoint.x / (unitVelocity.x - bullet.velocity.x)) * properties->ticksPerSecond * properties->updatesPerTick);
+            int microticksToHeat = (int)((bPoint.x / (unitVelocity.x - bullet.velocity.x)) * properties->ticksPerSecond * properties->updatesPerTick);
 
             if (microticksToHeat >= 0 and microticksToHeat <= microticks)  {
                 double timeToHeat = microticksToHeat / (properties->ticksPerSecond * properties->updatesPerTick);
@@ -472,7 +566,7 @@ optional<int> Unit::crossBulletTick(Bullet &bullet, int microticks, const Vec2Do
         }
 
         if ((bullet.velocity.y - unitVelocity.y) != 0) {//@TODO optimzied it!!!
-            int microticksToHeat = (int)ceil((bPoint.y / (unitVelocity.y - bullet.velocity.y)) * properties->ticksPerSecond * properties->updatesPerTick);
+            int microticksToHeat = (int)((bPoint.y / (unitVelocity.y - bullet.velocity.y)) * properties->ticksPerSecond * properties->updatesPerTick);
 
             if (microticksToHeat >= 0 and microticksToHeat <= microticks)  {
                 double timeToHeat = microticksToHeat / (properties->ticksPerSecond * properties->updatesPerTick);
@@ -488,15 +582,14 @@ optional<int> Unit::crossBulletTick(Bullet &bullet, int microticks, const Vec2Do
             }
         }
     }
-
-    return (heatWithBulletMicrotick > microticks ? nullopt : optional<int>(heatWithBulletMicrotick));
+    return heatWithBulletMicrotick;
 }
 
-pair<double, double> Unit::setFrontSegments(const Vec2Double & dir, Vec2Double & frontPoint) const {
+pair<double, double> Unit::setFrontSegments(const Vec2Double & dir, Vec2Double & frontPoint, const Vec2Double & position) const {
     if (dir.x >= 0 and dir.y >= 0) {
-        frontPoint.x = position.x - widthHalf;
-        frontPoint.y = position.y;
-        return make_pair(size.x, size.y);
+        frontPoint.x = position.x + widthHalf;
+        frontPoint.y = position.y + size.y;
+        return make_pair(-size.x, -size.y);
     } else if (dir.x >= 0 and dir.y < 0) {
         frontPoint.x = position.x - widthHalf;
         frontPoint.y = position.y + size.y;
@@ -510,4 +603,103 @@ pair<double, double> Unit::setFrontSegments(const Vec2Double & dir, Vec2Double &
         frontPoint.y = position.y;
         return make_pair(-size.x, size.y);
     }
+}
+
+
+int Unit::horFirstEvent(double velocity, int microTicksLimit, const Vec2Double & position) const {
+
+    int rightPosTileX = (int)(position.x + widthHalf);
+    int leftPosTileX = (int)(position.x - widthHalf);
+    int posTileX = (int)position.x;
+    int posTileY = (int)position.y;
+
+    double x = velocity * microTicksLimit / properties->microticksPerSecond + position.x + (velocity >= 0 ? widthHalf : -widthHalf);
+    int frontTile = (int)x;
+
+    int prevTile = (velocity >= 0 ? rightPosTileX : leftPosTileX);
+
+    if (velocity >= 0 and frontTile == leftPosTileX or velocity < 0 and frontTile == rightPosTileX)  {
+        return microTicksLimit;
+    }
+
+    int backTile = velocity * microTicksLimit / properties->microticksPerSecond + position.x + (velocity >= 0 ? -widthHalf : widthHalf);
+
+    bool onGround = level->tiles[posTileX][ (int)ceil(position.y - 1)] == Tile::WALL or level->tiles[rightPosTileX][ (int)ceil(position.y - 1)] == Tile::WALL or level->tiles[leftPosTileX][ (int)ceil(position.y - 1)] == Tile::WALL;
+
+    if (onGround and level->tiles[backTile][posTileY - 1] == Tile::EMPTY) {//Fall from edge
+        double posX = position.x + (velocity >= 0 ? -widthHalf : widthHalf);
+        double edgeTile = (velocity >= 0 ? ceil(posX) :  floor(posX));
+        double distance = abs(edgeTile - posX);
+
+        return (int)ceil((distance / velocity) * properties->updatesPerTick * properties->ticksPerSecond);
+    }
+
+    int meanTileY = (int)(position.y + size.y / 2.0);
+    int topTileY = (int)(position.y + size.y);
+
+    if (level->tiles[frontTile][topTileY] == level->tiles[prevTile][topTileY]
+        and
+        level->tiles[frontTile][meanTileY] == level->tiles[prevTile][meanTileY]
+        and
+        level->tiles[frontTile][posTileY] == level->tiles[prevTile][posTileY]
+    ) {
+        return microTicksLimit;
+    }
+
+    double distance = (-sgn(velocity)) * (position.x - (velocity >= 0 ? ceil(position.x) : floor(position.x) ) );
+
+    return (int)ceil((distance / velocity) * properties->updatesPerTick * properties->ticksPerSecond);
+}
+
+
+int Unit::verFirstEvent(double velocity, int microTicksLimit, const Vec2Double & position, const UnitAction & action) const {
+
+    int rightPosTileX = (int)(position.x + widthHalf);
+    int leftPosTileX = (int)(position.x - widthHalf);
+    int posTileX = (int)position.x;
+
+    if (jumpState.canJump and jumpState.canCancel and action.jump) {//Jumping
+        //End jumping time
+        int endJumpMicroTicks = min(microTicksLimit, (int)ceil(jumpState.maxTime * properties->updatesPerTick * properties->ticksPerSecond));
+
+        double y = jumpState.speed * microTicksLimit * properties->microticksPerSecond + position.y;
+
+        //Roof case
+        double topY = y + size.y;
+
+        int topTileY = (int)topY;
+
+        if (
+                level->tiles[posTileX][topTileY] == Tile::WALL
+                or
+                level->tiles[leftPosTileX][topTileY] == Tile::WALL
+                or
+                level->tiles[rightPosTileX][topTileY] == Tile::WALL
+                ) {
+
+            int microTicksToRoof = (int)ceil(((topTileY - position.y - size.y) / jumpState.speed) * properties->updatesPerTick * properties->ticksPerSecond);
+            return min(endJumpMicroTicks, microTicksToRoof);
+        }
+
+        //Ladder case
+
+        double middleY = y + size.y / 2.0;
+        int middleTileY = (int)middleY;
+        int prevMiddleTileY = (int)(position.y + size.y / 2.0);
+
+        if (level->tiles[posTileX][middleTileY] == Tile::LADDER and level->tiles[posTileX][prevMiddleTileY] != Tile::LADDER) {
+            int microTicksToLadder = (int)ceil(((middleTileY - position.y - size.y / 2.0) / jumpState.speed) * properties->updatesPerTick * properties->ticksPerSecond);
+            return min(endJumpMicroTicks, microTicksToLadder);
+        }
+
+        //Platform case
+
+        int downTileY = (int)y;
+
+        if (level->tiles[rightPosTileX][downTileY] == Tile::EMPTY) {
+
+        }
+
+    }
+
 }
