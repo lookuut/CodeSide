@@ -43,11 +43,11 @@ public:
             );
 
     std::unordered_map<int, UnitAction> actions;
-    myStrategy.tick(*playerView->game, debug);
+    myStrategy.tick(debug);
     list<int> & units = playerView->game->aliveAllyUnits;
     for (const auto & unitId: units) {
         Unit & unit = playerView->game->units[Game::unitIndexById(unitId)];
-        actions.emplace(std::make_pair(unit.id, myStrategy.getAction(unit)));
+        actions.emplace(std::make_pair(unit.id, myStrategy.getAction(unit, debug)));
     }
     PlayerMessageGame::ActionMessage(Versioned(actions)).writeTo(*outputStream);
     outputStream->flush();
@@ -61,13 +61,13 @@ public:
 
         std::unordered_map<int, UnitAction> actions;
 
-        myStrategy.tick(*playerView->game, debug);
+        myStrategy.tick(debug);
 
         list<int> & units = playerView->game->aliveAllyUnits;
 
         for (const auto & unitId: units) {
             Unit & unit = playerView->game->units[Game::unitIndexById(unitId)];
-            actions.emplace(std::make_pair(unit.id, myStrategy.getAction(unit)));
+            actions.emplace(std::make_pair(unit.id, myStrategy.getAction(unit, debug)));
         }
 
         PlayerMessageGame::ActionMessage(Versioned(actions)).writeTo(*outputStream);

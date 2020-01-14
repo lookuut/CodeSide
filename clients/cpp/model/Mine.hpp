@@ -14,6 +14,7 @@
 using namespace std;
 
 class Unit;
+class Simulation;
 
 class Mine {
 public:
@@ -38,7 +39,7 @@ public:
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
 
-    void explode(vector<Unit> & units, vector<Mine> & mines, int currentMineIndex, map<int, bool> & deletedMines);
+    void explode(vector<Unit> & units, vector<Mine> & mines, int currentMineIndex, map<int, bool> & deletedMines, Simulation & simulation);
 
     bool equal(const Mine & mine, double eps) const;
 };

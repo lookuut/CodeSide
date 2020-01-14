@@ -23,6 +23,7 @@ private:
     vector<UnitAction> actions;
 
     MinMax minMax;
+    Game * game;
 
 public:
 
@@ -32,8 +33,8 @@ public:
           );
 
 
-  void tick(const Game &game, Debug &debug);
-  UnitAction getAction(const Unit &unit);
+  void tick(Debug &debug);
+  UnitAction getAction(const Unit &unit, Debug & debug);
 
   UnitAction simulationTest(const Unit &unit, const Game &game, Debug &debug);
   bool simulationEqualTests(const Unit & simulatedUnit, const Unit & unit, const Game & game) const;

@@ -34,6 +34,9 @@ void Simulation::update() {
     this->lootWeapons = game->lootWeapons;
     this->lootMines = game->lootMines;
 
+    this->lootWeaponIds = game->lootWeaponIds;
+    this->lootHealthPackIds = game->lootHealPacksIds;
+
     currentTick = 0;
 }
 
@@ -56,7 +59,7 @@ void Simulation::mineMicrotick() {
                         break;
                     case MineState::TRIGGERED://explode
 
-                        mine.explode(units, mines, i, deletedMines);
+                        mine.explode(units, mines, i, deletedMines, *this);
 
                         for (int mineId = mines.size() - 1; mineId >= 0; --mineId) {
                             if (deletedMines.find(mineId) != deletedMines.end()) {
@@ -94,10 +97,17 @@ void Simulation::bulletOverlapWithUnit(Unit &unit) {
                 if (bullet.weaponType == WeaponType::ROCKET_LAUNCHER) {
 
                     for (Unit & unit : units) {
-                        bullet.explossion(unit, unit.position);
+                        bullet.explossion(unit, unit.position, *this);
                     }
                 }
+
                 unit.health -= bullet.damage;
+
+                if (unit.playerId == game->allyPlayerId) {
+                    enemyPoints += bullet.damage + (unit.health <= 0 ? properties->killScore : 0);
+                } else {
+                    allyPoints += bullet.damage + (unit.health <= 0 ? properties->killScore : 0);
+                }
 
                 it = bullets.erase(it);
                 continue;
@@ -159,7 +169,7 @@ void Simulation::bulletWallOverlap() {
                 for (Unit & unit : units) {
                     Vec2Double unitVelocity = (unit.position - unit.prevPosition);
                     Vec2Double unitPos = unit.prevPosition + unitVelocity * ( microticksToWall / (double)properties->updatesPerTick);
-                    bullet.explossion(unit, unitPos);
+                    bullet.explossion(unit, unitPos, *this);
                 }
             }
             it = bullets.erase(it);
@@ -182,7 +192,7 @@ void Simulation::bulletMineOverlap() {
             if (Geometry::isRectOverlap(bullet.leftTop, bullet.rightDown, mine.leftTopAngle, mine.rightDownAngle)) {
 
                 map<int, bool> deletedMines;
-                mine.explode(units, mines, i, deletedMines);
+                mine.explode(units, mines, i, deletedMines, *this);
                 vector<Mine> newMines;
 
                 for (int mineId = mines.size() - 1; mineId >= 0; --mineId) {
@@ -207,17 +217,21 @@ void Simulation::bulletMineOverlap() {
 
 void Simulation::pickUpLoots(Unit & unit) {//@TODO how it works?
 
-    for (auto it = lootHealthPacks.begin(); it != lootHealthPacks.end(); ) {
-        if (unit.picUpkHealthPack(*it)) {
-            it = lootHealthPacks.erase(it);
+    for (auto it = lootHealthPackIds.begin(); it != lootHealthPackIds.end(); ) {
+
+        LootBox & lootHealthPack = lootHealthPacks[*it];
+        if (unit.picUpkHealthPack(lootHealthPack)) {
+            it = lootHealthPackIds.erase(it);
         } else {
             ++it;
         }
     }
 
-    for (auto it = lootWeapons.begin(); it != lootWeapons.end(); ) {
-        if (unit.pickUpWeapon(*it)) {
-            it = lootWeapons.erase(it);
+    for (auto it = lootWeaponIds.begin(); it != lootWeaponIds.end(); ) {
+
+        LootBox & lootWeapon = lootWeapons[*it];
+        if (unit.pickUpWeapon(lootWeapon)) {
+            it = lootWeaponIds.erase(it);
         } else {
             ++it;
         }
@@ -275,7 +289,7 @@ void Simulation::shootAction(Unit &unit, const Vec2Double & aim) {
     }
 }
 
-void Simulation::mineActicate(const Unit &unit) {
+void Simulation::mineActivate(const Unit &unit) {
 
     for (Mine & mine : mines) {
         if (mine.state == MineState::IDLE and Geometry::isRectOverlap(unit.leftTop, unit.rightDown, mine.activateLeftTopAngle, mine.activateRightDownAngle)) {
@@ -285,120 +299,30 @@ void Simulation::mineActicate(const Unit &unit) {
     }
 }
 
-void Simulation::tick(const vector<UnitAction> & actions, int ticks) {
 
-    /*for (int ii = 0; ii < 100; ++ii) {
+void Simulation::unitTick(Unit &unit, vector<Unit> &units, const UnitAction & action) {
+    pickUpLoots(unit);
 
-        chrono::system_clock::time_point start = chrono::system_clock::now();
+    unit.applyAction(action, units);
 
-        for (int j = 0; j < 1000000; ++j) {*/
+    bulletOverlapWithUnit(unit);
+    mineActivate(unit);
 
-
-    for (int & unitId: game->aliveAllyUnits) {
-        Unit & unit = units[Game::unitIndexById(unitId)];
-        const UnitAction &action = actions[Game::allyUnitIndexById(unit.id)];
-
-        if (action.plantMine) {
-            unit.plantMine(mines);
-        }
+    if (unit.onGround or unit.onLadder) {
+        ++unit.onGroundLadderTicks;
     }
+
+    unit.prevPosition = unit.position;
+}
+
+void Simulation::tick(const vector<UnitAction> & actions, int ticks) {
 
     for (int tick = 0; tick < ticks; tick++){
         for (int i = 0; i < Consts::microticks; ++i) {
-
             for (int & unitId: game->aliveAllyUnits) {
                 Unit & unit = units[Game::unitIndexById(unitId)];
-                const UnitAction &action = actions[Game::allyUnitIndexById(unit.id)];
-                double horSpeed = sgn(action.velocity) * min(abs(action.velocity), properties->unitMaxHorizontalSpeed);
-
-                if (action.plantMine) {
-                    unit.plantMine(mines);
-                }
-
-                if (action.shoot) {
-                    shootAction(unit, action.aim);
-                }
-
-                unit.weaponRoutine(microTicksPerSecond, action.aim);
-                pickUpLoots(unit);
-
-                unit.prevPosition = unit.position;
-
-                unit.moveHor(horSpeed * microTicksPerSecond);
-                unit.horizontalWallCollision(horSpeed);
-
-                for (int unitId : game->aliveAllyUnits) {
-                    Unit & nearUnit = game->units[Game::unitIndexById(unitId)];
-                    if (nearUnit.id != unit.id) {
-                        unit.unitHorCollide(nearUnit);
-                    }
-                }
-
-                for (int unitId : game->aliveEnemyUnits) {
-                    Unit & nearUnit = game->units[Game::unitIndexById(unitId)];
-                    unit.unitHorCollide(nearUnit);
-                }
-
-
-                if (unit.jumpState.canJump and unit.jumpState.canCancel) {//Jumping
-                    if (action.jump) {
-                        unit.jumping(unit.jumpState.speed * microTicksPerSecond, microTicksPerSecond);
-                    }
-                }
-
-                if (!unit.jumpState.canJump and unit.jumpState.maxTime <= .0) {//Down
-                    unit.downing(properties->unitFallSpeed * microTicksPerSecond);
-                }
-
-                if (unit.jumpState.canCancel) {//Down
-                    if (!action.jump) {
-                        unit.downing(properties->unitFallSpeed * microTicksPerSecond);
-                        unit.applyJumpCancel();
-                    }
-                } else if (unit.jumpState.maxTime > 0) {
-                    unit.jumping(unit.jumpState.speed * microTicksPerSecond, microTicksPerSecond);
-                }
-
-                unit.heatRoofRoutine();
-
-                if (unit.jumpState.maxTime <= .0) {
-                    unit.applyJumpCancel();
-                }
-
-                if (unit.isOnWall()) {
-                    unit.verticalWallCollision();
-                } else if (unit.isOnPlatform() and !unit.jumpState.canJump and !action.jumpDown) {
-                    unit.platformCollision();
-                }
-
-                if (unit.onLadder) {
-                    unit.applyOnGround();
-                }
-
-                if (unit.isOnJumpPad()) {
-                    unit.applyJumpPad(properties->jumpPadJumpSpeed, properties->jumpPadJumpTime);
-                }
-
-                for (int unitId : game->aliveAllyUnits) {
-                    Unit & nearUnit = game->units[Game::unitIndexById(unitId)];
-                    if (nearUnit.id != unit.id) {
-                        unit.unitVerCollide(nearUnit);
-                    }
-                }
-
-                for (int unitId : game->aliveEnemyUnits) {
-                    Unit & nearUnit = game->units[Game::unitIndexById(unitId)];
-                    unit.unitVerCollide(nearUnit);
-                }
-
-                bulletOverlapWithUnit(unit);
-                mineActicate(unit);
-
-                if (unit.onGround or unit.onLadder) {
-                    ++unit.onGroundLadderTicks;
-                }
-
-                unit.prevPosition = unit.position;
+                const UnitAction &action = actions[Game::unitIndexById(unit.id)];
+                unitTick(unit, units, action);
             }
 
             mineMicrotick();
@@ -410,10 +334,4 @@ void Simulation::tick(const vector<UnitAction> & actions, int ticks) {
     }
 
     currentTick += ticks;
-     /*   }
-
-        chrono::system_clock::time_point end = chrono::system_clock::now();
-        long micros = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-        cout << micros << endl;
-    }*/
 }

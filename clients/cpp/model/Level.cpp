@@ -9,10 +9,15 @@ Level::Level(std::vector<std::vector<Tile>> tiles) : tiles(tiles) { }
 
 Level Level::readFrom(InputStream& stream) {
     Level level;
+    level.jumpPads = unordered_map<int, int>();
     level.tiles = std::vector<std::vector<Tile>>(stream.readInt());
 
+    level.width = level.tiles.size();
+
+    int jumpPadIndex = 0;
     for (size_t i = 0; i < level.tiles.size(); i++) {
         level.tiles[i] = std::vector<Tile>(stream.readInt());
+
         for (size_t j = 0; j < level.tiles[i].size(); j++) {
             switch (stream.readInt()) {
             case 0:
@@ -29,6 +34,7 @@ Level Level::readFrom(InputStream& stream) {
                 break;
             case 4:
                 level.tiles[i][j] = Tile::JUMP_PAD;
+                level.jumpPads.insert(make_pair(level.tileIndex(i,j), jumpPadIndex++));
                 break;
             default:
                 throw std::runtime_error("Unexpected discriminant value");
@@ -36,9 +42,16 @@ Level Level::readFrom(InputStream& stream) {
         }
     }
 
+
+    level.height = level.tiles[0].size();
+
     return level;
 }
 
+
+int Level::tileIndex(int x, int y) {
+    return x + y * width;
+}
 
 void Level::buildWalls() {
     vector<int> visited = vector<int>(width * height, 0);

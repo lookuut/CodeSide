@@ -45,10 +45,12 @@ public:
     Vec2Double rotate(double angle) const;
     Vec2Double getOpponentAngle(double size, bool isClockWise) const;
 
-    Vec2Float toFloat();
+    Vec2Float toFloat()const;
+    static double sqrLen(const Vec2Double & v1, const Vec2Double & v2);
 };
 
 
-#define ZERO_VEC_2_DOUBLE Vec2Double(0,0)
+#define ZERO_VEC_2_DOUBLE Vec2Double(0, 0)
+#define X_AXIS Vec2Double(1, 0)
 
 #endif

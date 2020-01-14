@@ -3,6 +3,7 @@
 #include "Unit.hpp"
 #include "Game.hpp"
 #include <math.h>
+#include "../arena/Simulation.hpp"
 
 Bullet::Bullet() { }
 Bullet::Bullet(
@@ -101,7 +102,7 @@ std::string Bullet::toString() const {
         ")";
 }
 
-void Bullet::explossion(Unit & unit, const Vec2Double & unitPosition) const {
+void Bullet::explossion(Unit & unit, const Vec2Double & unitPosition, Simulation & simulation) const {
 
     if (weaponType != WeaponType::ROCKET_LAUNCHER) {
         return;
@@ -117,6 +118,12 @@ void Bullet::explossion(Unit & unit, const Vec2Double & unitPosition) const {
 
     if (Geometry::isRectOverlap(explossionLeft, explossionRight, unitLeft, unitRight)) {
         unit.health -= explosionParams.get()->damage;
+
+        if (unit.playerId == simulation.game->allyPlayerId) {
+            simulation.enemyPoints += explosionParams.get()->damage + (unit.health <= 0 ? simulation.properties->killScore : 0);
+        } else {
+            simulation.allyPoints += explosionParams.get()->damage + (unit.health <= 0 ? simulation.properties->killScore : 0);
+        }
     }
 }
 

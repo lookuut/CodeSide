@@ -54,6 +54,9 @@ public:
     std::vector<LootBox> lootWeapons;
     std::vector<LootBox> lootMines;
 
+    vector<int> lootHealthPackIds;
+    vector<int> lootWeaponIds;
+
     Simulation(Game * game, Debug * debug);
 
     void update();
@@ -62,7 +65,7 @@ public:
 
     void moveBullets();
     void mineMicrotick();
-    void mineActicate(const Unit & unit);
+    void mineActivate(const Unit &unit);
     void bulletOverlapWithUnit(Unit &unit);
     void bulletWallOverlap();
     void bulletMineOverlap();
@@ -70,6 +73,8 @@ public:
 
     std::string toString() const;
     void pickUpLoots(Unit & unit);
+
+    void unitTick(Unit & unit, vector<Unit> & units, const UnitAction & action);
 };
 
 #endif //AICUP2019_ARENA_HPP

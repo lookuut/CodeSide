@@ -52,15 +52,20 @@ properties(unit.properties),
 onGround(unit.onGround),
 onLadder(unit.onLadder),
 mines(unit.mines),
-onGroundLadderTicks(unit.onGroundLadderTicks)
+onGroundLadderTicks(unit.onGroundLadderTicks),
+lastTouchedJumpPad(unit.lastTouchedJumpPad),
+lastTouchedJumpPadPart(unit.lastTouchedJumpPadPart),
+leftTop(unit.leftTop),
+rightDown(unit.rightDown),
+widthHalf(unit.widthHalf),
+posTileX(unit.posTileX),
+posTileY(unit.posTileY),
+leftPosTileX(unit.leftPosTileX),
+rightPosTileX(unit.rightPosTileX),
+topTileY(unit.topTileY),
+meanTileY(unit.meanTileY),
+minUpDeltaTileY(unit.minUpDeltaTileY)
 {
-    leftTop.x = position.x - size.x / 2.0;
-    leftTop.y = position.y + size.y;
-
-    rightDown.x = position.x + size.x / 2.0;
-    rightDown.y = position.y;
-    widthHalf = size.x / 2.0;
-
     if (unit.weapon) {
         weapon = make_shared<Weapon>(
                 Weapon(
@@ -73,7 +78,6 @@ onGroundLadderTicks(unit.onGroundLadderTicks)
                         unit.weapon.get()->lastAngle,
                         unit.weapon.get()->lastAngle));
     }
-    updateTilePos();
 }
 
 void Unit::init(InputStream &stream, Properties *properties, Level *level) {
@@ -101,7 +105,7 @@ void Unit::init(InputStream &stream, Properties *properties, Level *level) {
 }
 
 void Unit::update(InputStream &stream) {
-    isAlive = true;
+
     health = stream.readInt();
     position = Vec2Double::readFrom(stream);
     Vec2Double::readFrom(stream);
@@ -226,15 +230,52 @@ bool Unit::isOnWall() {
     return level->tiles[leftPosTileX][posTileY] == Tile::WALL or level->tiles[rightPosTileX][posTileY] == Tile::WALL;
 }
 
-bool Unit::isOnPlatform() {
+bool Unit::isOnPlatform() const {
 
     return (level->tiles[leftPosTileX][minUpDeltaTileY] != Tile::PLATFORM or level->tiles[rightPosTileX][minUpDeltaTileY] != Tile::PLATFORM)
             and (level->tiles[leftPosTileX][posTileY] == Tile::PLATFORM or level->tiles[rightPosTileX][posTileY] == Tile::PLATFORM) and
-            (prevPosition.y >= posTileY + 1);
+            (prevPosition.y >= posTileY + 1) or (jumpState.canJump and level->tiles[leftPosTileX][(int)(posTileY - Consts::eps)] == Tile::PLATFORM and level->tiles[rightPosTileX][(int)(posTileY - Consts::eps)] == Tile::PLATFORM);
 }
 
 bool Unit::isOnJumpPad() {
-    return level->tiles[leftPosTileX][posTileY] == Tile::JUMP_PAD or level->tiles[rightPosTileX][posTileY] == Tile::JUMP_PAD;
+
+    if (level->tiles[leftPosTileX][posTileY] == Tile::JUMP_PAD) {
+        lastTouchedJumpPad = level->tileIndex(leftPosTileX, posTileY);
+        lastTouchedJumpPadPart = (position.y - posTileY) * Consts::ppFieldSize;
+        return true;
+    }
+
+    if (level->tiles[rightPosTileX][posTileY] == Tile::JUMP_PAD) {
+        lastTouchedJumpPad = level->tileIndex(rightPosTileX, posTileY);
+        lastTouchedJumpPadPart = (position.y - posTileY) * Consts::ppFieldSize;
+        return true;
+    }
+
+    if (level->tiles[leftPosTileX][meanTileY] == Tile::JUMP_PAD) {
+        lastTouchedJumpPad = level->tileIndex(leftPosTileX, meanTileY);
+        lastTouchedJumpPadPart = (position.y + size.y / 2.0 - meanTileY) * Consts::ppFieldSize;
+        return true;
+    }
+
+    if (level->tiles[rightPosTileX][meanTileY] == Tile::JUMP_PAD) {
+        lastTouchedJumpPad = level->tileIndex(rightPosTileX, meanTileY);
+        lastTouchedJumpPadPart = (position.y + size.y / 2.0 - meanTileY) * Consts::ppFieldSize;
+        return true;
+    }
+
+    if (level->tiles[leftPosTileX][topTileY] == Tile::JUMP_PAD) {
+        lastTouchedJumpPad = level->tileIndex(leftPosTileX, topTileY);
+        lastTouchedJumpPadPart = (position.y + size.y - topTileY) * Consts::ppFieldSize;
+        return true;
+    }
+
+    if (level->tiles[rightPosTileX][topTileY] == Tile::JUMP_PAD) {
+        lastTouchedJumpPad = level->tileIndex(rightPosTileX, topTileY);
+        lastTouchedJumpPadPart = (position.y + size.y - topTileY) * Consts::ppFieldSize;
+        return true;
+    }
+
+    return false;
 }
 
 void Unit::horizontalWallCollision(double velocity) {
@@ -307,7 +348,6 @@ void Unit::platformCollision() {
     applyOnGround();
     updateTilePos();
     updateMoveState();
-    onPlatform = true;
 }
 
 void Unit::applyJumpPad(double speed, double maxTime) {
@@ -399,8 +439,157 @@ bool Unit::picUpkMine(const LootBox &lootbox) {
     return false;
 }
 
-bool Unit::isPickUpLootbox(const LootBox &lootBox) {
+bool Unit::isPickUpLootbox(const LootBox &lootBox) const {
     return Geometry::isRectOverlap(leftTop, rightDown, lootBox.leftTop, lootBox.rightDown);
+}
+
+
+void Unit::applyActionMicroticks(const UnitAction &action, vector<Unit> &units, int microticks) {
+    double microTicksPerSecond =  properties->updatesPerSecond * microticks;
+
+    weaponRoutine(microTicksPerSecond, action.aim);
+
+    prevPosition = position;
+
+    moveHor(action.velocity * microTicksPerSecond);
+    horizontalWallCollision(action.velocity);
+
+    if (isOnJumpPad()) {
+        applyJumpPad(properties->jumpPadJumpSpeed, properties->jumpPadJumpTime);
+    }
+
+    for (Unit & nearUnit : units) {
+        if (nearUnit.id != id) {
+            unitHorCollide(nearUnit);
+        }
+    }
+
+    if (jumpState.canJump and jumpState.canCancel) {//Jumping
+        if (action.jump) {
+            jumping(jumpState.speed * microTicksPerSecond, microTicksPerSecond);
+        }
+    }
+
+    if (!jumpState.canJump and jumpState.maxTime <= .0) {//Down
+        downing(properties->unitFallSpeed * microTicksPerSecond);
+    }
+
+    if (jumpState.canCancel) {//Down
+        if (!action.jump) {
+            downing(properties->unitFallSpeed * microTicksPerSecond);
+            applyJumpCancel();
+        }
+    } else if (jumpState.maxTime > 0) {
+        jumping(jumpState.speed * microTicksPerSecond, microTicksPerSecond);
+    }
+
+    heatRoofRoutine();
+
+    if (jumpState.maxTime <= .0) {
+        applyJumpCancel();
+    }
+
+    if (isOnJumpPad()) {
+        applyJumpPad(properties->jumpPadJumpSpeed, properties->jumpPadJumpTime);
+    }
+
+    if (isOnWall()) {
+        verticalWallCollision();
+    } else if (isOnPlatform() and !jumpState.canJump and !action.jumpDown) {
+        platformCollision();
+    }
+
+    if (onLadder) {
+        applyOnGround();
+    }
+
+    for (Unit & nearUnit : units) {
+        if (nearUnit.id != id) {
+            unitVerCollide(nearUnit);
+        }
+    }
+}
+
+int Unit::collisionWithWallMicrotick(const UnitAction &action) {
+    double moveLeftX = position.x + sgn(action.velocity) * properties->unitMaxHorTickDistance - widthHalf;
+    double moveRightX = position.x + sgn(action.velocity) * properties->unitMaxHorTickDistance + widthHalf;
+
+    double prevLeftX = position.x - widthHalf;
+    double prevRightX = position.x + widthHalf;
+
+    if ((jumpState.canJump and action.jump) or (jumpState.canJump and !jumpState.canCancel)) {//heat with roof
+        double move_y = position.y + size.y + jumpState.speed / properties->ticksPerSecond;
+        double prev_y = position.y + size.y;
+
+        if ((int)move_y != (int)prev_y) {
+            if (
+                    level->tiles[(int)prevLeftX][(int)move_y] == Tile::WALL
+                    or
+                    level->tiles[(int)moveLeftX][(int)move_y] == Tile::WALL
+                    or
+                    level->tiles[(int)prevRightX][(int)move_y] == Tile::WALL
+                    or
+                    level->tiles[(int)moveRightX][(int)move_y] == Tile::WALL
+                    or
+                    level->tiles[(int)prevLeftX][(int)move_y] == Tile::JUMP_PAD
+                    or
+                    level->tiles[(int)moveLeftX][(int)move_y] == Tile::JUMP_PAD
+                    or
+                    level->tiles[(int)prevRightX][(int)move_y] == Tile::JUMP_PAD
+                    or
+                    level->tiles[(int)moveRightX][(int)move_y] == Tile::JUMP_PAD
+                    ) {
+                return (int)properties->ticksPerSecond * properties->updatesPerTick * ((int)move_y - (position.y + size.y)) / jumpState.speed;
+            }
+        }
+    } else if (!jumpState.canJump and !jumpState.canCancel or jumpState.canCancel and !action.jump) {//Down
+        double move_y = position.y - properties->unitFallSpeed / properties->ticksPerSecond;
+        double prev_y = position.y;
+
+        if ((int)move_y != (int)prev_y) {
+            if (
+                    level->tiles[(int)prevLeftX][(int)move_y] == Tile::WALL
+                    or
+                    level->tiles[(int)moveLeftX][(int)move_y] == Tile::WALL
+                    or
+                    level->tiles[(int)prevRightX][(int)move_y] == Tile::WALL
+                    or
+                    level->tiles[(int)moveRightX][(int)move_y] == Tile::WALL
+                    or
+                    level->tiles[(int)prevLeftX][(int)move_y] == Tile::JUMP_PAD
+                    or
+                    level->tiles[(int)moveLeftX][(int)move_y] == Tile::JUMP_PAD
+                    or
+                    level->tiles[(int)prevRightX][(int)move_y] == Tile::JUMP_PAD
+                    or
+                    level->tiles[(int)moveRightX][(int)move_y] == Tile::JUMP_PAD
+                    or
+                    level->tiles[(int)prevLeftX][(int)move_y] == Tile::PLATFORM
+                    or
+                    level->tiles[(int)moveLeftX][(int)move_y] == Tile::PLATFORM
+                    or
+                    level->tiles[(int)prevRightX][(int)move_y] == Tile::PLATFORM
+                    or
+                    level->tiles[(int)moveRightX][(int)move_y] == Tile::PLATFORM
+                    ) {
+                return (int)properties->ticksPerSecond * properties->updatesPerTick * (position.y - ((int)move_y + 1.0)) / properties->unitFallSpeed;
+            }
+        }
+    }
+
+    return properties->updatesPerTick;
+}
+
+void Unit::applyAction(const UnitAction &action, vector<Unit> & units) {
+
+    int microtick = collisionWithWallMicrotick(action) + 1;
+
+    if (microtick > 0 and microtick < properties->updatesPerTick) {
+        applyActionMicroticks(action, units, microtick);
+        applyActionMicroticks(action, units, properties->updatesPerTick - microtick);
+    } else {
+        applyActionMicroticks(action, units, properties->updatesPerTick);
+    }
 }
 
 void Unit::weaponRoutine(double time, const Vec2Double & aim) {
@@ -605,101 +794,147 @@ pair<double, double> Unit::setFrontSegments(const Vec2Double & dir, Vec2Double &
     }
 }
 
+bool Unit::checkAim(const Unit & enemy, Vec2Double & aim, const list<int> & allies, const vector<Unit> & units) const {
 
-int Unit::horFirstEvent(double velocity, int microTicksLimit, const Vec2Double & position) const {
+    Vec2Float unitCenter(position.x, position.y + size.y / 2.0);
+    Vec2Double targetPoint = position + Vec2Double(0, size.y / 2.0) + aim;
 
-    int rightPosTileX = (int)(position.x + widthHalf);
-    int leftPosTileX = (int)(position.x - widthHalf);
-    int posTileX = (int)position.x;
-    int posTileY = (int)position.y;
-
-    double x = velocity * microTicksLimit / properties->microticksPerSecond + position.x + (velocity >= 0 ? widthHalf : -widthHalf);
-    int frontTile = (int)x;
-
-    int prevTile = (velocity >= 0 ? rightPosTileX : leftPosTileX);
-
-    if (velocity >= 0 and frontTile == leftPosTileX or velocity < 0 and frontTile == rightPosTileX)  {
-        return microTicksLimit;
+    if (level->crossWall(unitCenter, targetPoint.toFloat())) {
+        return false;
     }
 
-    int backTile = velocity * microTicksLimit / properties->microticksPerSecond + position.x + (velocity >= 0 ? -widthHalf : widthHalf);
+    Vec2Double lowLineFromBulletCenter = aim.rotate(weapon.get()->spread);
+    Vec2Double topLineFromBulletCenter = aim.rotate(-weapon.get()->spread);
 
-    bool onGround = level->tiles[posTileX][ (int)ceil(position.y - 1)] == Tile::WALL or level->tiles[rightPosTileX][ (int)ceil(position.y - 1)] == Tile::WALL or level->tiles[leftPosTileX][ (int)ceil(position.y - 1)] == Tile::WALL;
+    Vec2Double bulletLowLineDelta = lowLineFromBulletCenter.getOpponentAngle(weapon.get()->params.bullet.size / 2.0, false);
+    Vec2Double bulletTopLineDelta = topLineFromBulletCenter.getOpponentAngle(weapon.get()->params.bullet.size / 2.0, true);
 
-    if (onGround and level->tiles[backTile][posTileY - 1] == Tile::EMPTY) {//Fall from edge
-        double posX = position.x + (velocity >= 0 ? -widthHalf : widthHalf);
-        double edgeTile = (velocity >= 0 ? ceil(posX) :  floor(posX));
-        double distance = abs(edgeTile - posX);
+    Vec2Double lowLine = bulletLowLineDelta + lowLineFromBulletCenter;
+    Vec2Double topLine = bulletTopLineDelta + topLineFromBulletCenter;
 
-        return (int)ceil((distance / velocity) * properties->updatesPerTick * properties->ticksPerSecond);
-    }
+    auto lowLineCross = level->crossMiDistanceWall(unitCenter + bulletLowLineDelta, unitCenter + lowLine);
+    auto topLineCross = level->crossMiDistanceWall(unitCenter + bulletTopLineDelta, unitCenter + topLine);
 
-    int meanTileY = (int)(position.y + size.y / 2.0);
-    int topTileY = (int)(position.y + size.y);
 
-    if (level->tiles[frontTile][topTileY] == level->tiles[prevTile][topTileY]
+    if (
+        weapon.get()->type == WeaponType ::ROCKET_LAUNCHER
         and
-        level->tiles[frontTile][meanTileY] == level->tiles[prevTile][meanTileY]
-        and
-        level->tiles[frontTile][posTileY] == level->tiles[prevTile][posTileY]
-    ) {
-        return microTicksLimit;
+        !((lowLineCross ? (lowLineCross.value() - targetPoint).sqrLen() < (lowLineCross.value() - unitCenter).sqrLen() : true)
+            and
+        (topLineCross ? (topLineCross.value() - targetPoint).sqrLen() < (topLineCross.value() - unitCenter).sqrLen() : true))
+
+        ) {
+        return false;
     }
 
-    double distance = (-sgn(velocity)) * (position.x - (velocity >= 0 ? ceil(position.x) : floor(position.x) ) );
+    for (int allyUnitId : allies) {
 
-    return (int)ceil((distance / velocity) * properties->updatesPerTick * properties->ticksPerSecond);
+        const Unit & allyUnit = units[Game::unitIndexById(allyUnitId)];
+
+        if (allyUnit.id != id) {
+
+            vector<vector<Vec2Double>> allyBorders = {
+                    {
+                            Vec2Double(allyUnit.position.x - allyUnit.widthHalf, allyUnit.position.y), Vec2Double(allyUnit.position.x + allyUnit.widthHalf, allyUnit.position.y)
+                    },
+                    {
+                            Vec2Double(allyUnit.position.x - allyUnit.widthHalf, allyUnit.position.y), Vec2Double(allyUnit.position.x - allyUnit.widthHalf, allyUnit.position.y + allyUnit.size.y)
+                    },
+                    {
+                            Vec2Double(allyUnit.position.x + allyUnit.widthHalf, allyUnit.position.y), Vec2Double(allyUnit.position.x + allyUnit.widthHalf, allyUnit.position.y + allyUnit.size.y)
+                    },
+                    {
+                            Vec2Double(allyUnit.position.x - allyUnit.widthHalf, allyUnit.position.y + allyUnit.size.y), Vec2Double(allyUnit.position.x + allyUnit.widthHalf, allyUnit.position.y + allyUnit.size.y)
+                    }
+            };
+
+
+            for (const vector<Vec2Double> & border : allyBorders) {
+                if (
+                        Geometry::doIntersect(border[0], border[1], unitCenter, targetPoint)
+                        or
+                        Geometry::doIntersect(border[0], border[1], (unitCenter + bulletLowLineDelta),  (unitCenter + lowLine))
+                        or
+                        Geometry::doIntersect(border[0], border[1], (unitCenter + bulletTopLineDelta),  (unitCenter + topLine))
+                        ) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+int Unit::actionType() const {
+
+    if (isOnPlatform()) {
+        return 3;
+    }
+
+    if (onGround) {
+        return 1;
+    }
+
+    if (jumpState.maxTime > 0) {
+        return 0;
+    }
+
+    return 2;
 }
 
 
-int Unit::verFirstEvent(double velocity, int microTicksLimit, const Vec2Double & position, const UnitAction & action) const {
+bool Unit::shootable(const Unit &unit) const {
+    Vec2Float targetPoint(unit.position.x, unit.position.y + unit.size.y / 2.0);
+    Vec2Float unitCenter(position.x, position.y + size.y / 2.0);
 
-    int rightPosTileX = (int)(position.x + widthHalf);
-    int leftPosTileX = (int)(position.x - widthHalf);
-    int posTileX = (int)position.x;
 
-    if (jumpState.canJump and jumpState.canCancel and action.jump) {//Jumping
-        //End jumping time
-        int endJumpMicroTicks = min(microTicksLimit, (int)ceil(jumpState.maxTime * properties->updatesPerTick * properties->ticksPerSecond));
+    return level->crossWall(unitCenter, targetPoint) == nullopt;
+}
 
-        double y = jumpState.speed * microTicksLimit * properties->microticksPerSecond + position.y;
+pair<int, Vec2Double> Unit::chooseEnemy(const list<int> &enemyIds, const vector<Unit> &enemies, int choosenEnemyId) const {
 
-        //Roof case
-        double topY = y + size.y;
+    int minEnemyValueId = enemyIds.front();
+    double minEnemyValue = INT32_MAX;
 
-        int topTileY = (int)topY;
+    Vec2Double enemyAim;
 
-        if (
-                level->tiles[posTileX][topTileY] == Tile::WALL
-                or
-                level->tiles[leftPosTileX][topTileY] == Tile::WALL
-                or
-                level->tiles[rightPosTileX][topTileY] == Tile::WALL
-                ) {
+    for (int enemyId : enemyIds) {
+        const Unit & enemy = enemies[Game::unitIndexById(enemyId)];
 
-            int microTicksToRoof = (int)ceil(((topTileY - position.y - size.y) / jumpState.speed) * properties->updatesPerTick * properties->ticksPerSecond);
-            return min(endJumpMicroTicks, microTicksToRoof);
+        Vec2Double aim = (Vec2Double(enemy.position.x, enemy.position.y + enemy.size.y / 2.0)  - Vec2Double(position.x, position.y + size.y / 2.0));
+
+        double enemyVal = enemyValue(enemy, enemyId == choosenEnemyId, aim);
+
+        if (minEnemyValue > enemyVal) {
+            minEnemyValue = enemyVal;
+            minEnemyValueId = enemyId;
+            enemyAim = aim;
         }
-
-        //Ladder case
-
-        double middleY = y + size.y / 2.0;
-        int middleTileY = (int)middleY;
-        int prevMiddleTileY = (int)(position.y + size.y / 2.0);
-
-        if (level->tiles[posTileX][middleTileY] == Tile::LADDER and level->tiles[posTileX][prevMiddleTileY] != Tile::LADDER) {
-            int microTicksToLadder = (int)ceil(((middleTileY - position.y - size.y / 2.0) / jumpState.speed) * properties->updatesPerTick * properties->ticksPerSecond);
-            return min(endJumpMicroTicks, microTicksToLadder);
-        }
-
-        //Platform case
-
-        int downTileY = (int)y;
-
-        if (level->tiles[rightPosTileX][downTileY] == Tile::EMPTY) {
-
-        }
-
     }
 
+    return make_pair(minEnemyValueId, enemyAim);
+}
+
+double Unit::enemyValue(const Unit &enemy, bool alreadyChoosed, const Vec2Double & aim) const {
+
+    return (1.0  - 1.0 / aim.sqrLen()) + (double)alreadyChoosed + enemy.health / (double)health + weapon.get()->lastAngle != Consts::noLastAngleValue * abs(aim.angle(X_AXIS) - weapon.get()->lastAngle);
+}
+
+int Unit::stateIndex() {
+    if (jumpState.canJump and jumpState.canCancel) {//onGround or jumping
+        return 0;
+    }
+
+    if (!jumpState.canJump and !jumpState.canCancel) {//Fall
+        return 1;
+    }
+
+    if (isOnJumpPad()) {//Is ON Jump PAD
+        return 2;
+    }
+
+    if (jumpState.canJump and !jumpState.canCancel) {//Jump pad
+        return level->jumpPads[lastTouchedJumpPad] * Consts::ppFieldSize + lastTouchedJumpPadPart + Consts::predefinitionStates;
+    }
 }

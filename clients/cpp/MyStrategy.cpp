@@ -23,25 +23,70 @@ level(&game->level),
 allyPlayerId(game->allyPlayerId),
 enemyPlayerId(game->enemyPlayerId),
 arena(game, debug),
-minMax(game, debug)
+minMax(game, debug),
+game(game)
 {
     actions = vector<UnitAction>(Consts::maxUnitCount, UnitAction());
 }
 
-void MyStrategy::tick(const Game &game, Debug &debug) {
-    chrono::system_clock::time_point start = chrono::system_clock::now();
+void MyStrategy::tick(Debug &debug) {
 
-    minMax.generateBestAction(game, debug);
+    chrono::system_clock::time_point start = chrono::system_clock::now();
+    if (game->currentTick % 5 == 0) {
+        const Unit & unit = game->units[Game::unitIndexById(game->aliveAllyUnits.front())];
+        vector<AstarNode> unitPath;
+
+        if (game->properties.teamSize == 2) {
+            AstarNode node = {
+                    .x = 0,
+                    .y = 0,
+                    .vel = 0,
+                    .jump = false,
+                    .jumpDown = false,
+                    .timeCostFromStart = 0,
+                    .distanceCostToFinish = 0,
+                    .unit = game->units[Game::unitIndexById(game->aliveAllyUnits.back())],
+                    .parentNodeIndex = 0,
+                    .parentNodeStateIndex = 0
+            };
+
+            unitPath.push_back(node);
+        }
+
+        game->aStarPathInit(unit, game->lootMines, debug, unitPath);
+
+        if (game->properties.teamSize == 2) {
+            const Unit & unit = game->units[Game::unitIndexById(game->aliveAllyUnits.back())];
+            game->aStarPathInit(unit, game->lootMines, debug, game->unitAstarPath[Game::allyUnitIndexById(game->aliveAllyUnits.front())]);
+        }
+    }
+
+    //minMax.generateBestAction(*game, debug);
 
     chrono::system_clock::time_point end = chrono::system_clock::now();
     long micros = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    cout << "Tick " << game.currentTick << " perfomance " << micros << endl;
+    cout << "Tick " << game->currentTick << " perfomance " << micros << endl;
 }
 
 
-UnitAction MyStrategy::getAction(const Unit &unit) {
+UnitAction MyStrategy::getAction(const Unit &unit, Debug & debug) {
+
+    UnitAction action;
+
+    if (game->unitAstarPath[Game::allyUnitIndexById(unit.id)].size() > 0) {
+        AstarNode & node = game->unitAstarPath[Game::allyUnitIndexById(unit.id)].front();
+
+        action.velocity = node.vel;
+        action.jump = node.jump;
+        action.jumpDown = node.jumpDown;
+
+        game->unitAstarPath[Game::allyUnitIndexById(unit.id)].erase(game->unitAstarPath[Game::allyUnitIndexById(unit.id)].begin());
+    }
+
+
+    return action;
     //return simulationTest(unit, game, debug);
-    return minMax.getBestAction(unit);
+    //return minMax.getBestAction(unit);
 }
 
 bool MyStrategy::simulationEqualTests(const Unit &simulatedUnit, const Unit &unit, const Game &game) const {

@@ -36,6 +36,11 @@ Vec2Double Vec2Double::operator-(const Vec2Double &vec) const {
     return Vec2Double(x - vec.x, y - vec.y);
 }
 
+
+double Vec2Double::sqrLen(const Vec2Double &v1, const Vec2Double &v2) {
+    return (v1.x - v2.x) * (v1.x - v2.x) + (v1.y - v2.y) * (v1.y - v2.y);
+}
+
 void Vec2Double::operator+=(const Vec2Double &vec) {
     x += vec.x;
     y += vec.y;
@@ -104,7 +109,7 @@ Vec2Double Vec2Double::getOpponentAngle(double size, bool isClockWise) const {
     }
 }
 
-Vec2Float Vec2Double::toFloat() {
+Vec2Float Vec2Double::toFloat() const {
     return Vec2Float((float)x, (float)y);
 }
 

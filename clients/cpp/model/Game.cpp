@@ -1,4 +1,5 @@
 #include "Game.hpp"
+#include <set>
 
 unique_ptr<Game> Game::game;
 
@@ -6,7 +7,6 @@ Game::Game() { }
 
 Game::~Game() {
 }
-
 
 Game * Game::init(InputStream &stream, int allyPlayerId) {
     game = make_unique<Game>(Game());
@@ -17,8 +17,8 @@ Game * Game::init(InputStream &stream, int allyPlayerId) {
     game->properties = Properties::readFrom(stream);
     game->level = Level::readFrom(stream);
 
-    game->level.width = game->level.tiles.size();
-    game->level.height = game->level.tiles[0].size();
+    game->pp_width = game->level.width * Consts::ppFieldSize;
+    game->pp_height = game->level.height * Consts::ppFieldSize;
 
     game->level.buildWalls();
     game->level.buildStandablePlaces();
@@ -48,6 +48,7 @@ Game * Game::init(InputStream &stream, int allyPlayerId) {
     defaultUnit.properties = &game->properties;
     defaultUnit.level = &game->level;
 
+    game->unitAstarPath = vector<vector<AstarNode>>(unitSize / 2, vector<AstarNode>());
     game->units = vector<Unit>(unitSize, defaultUnit);
     game->aliveAllyUnits = list<int>();
     game->aliveEnemyUnits = list<int>();
@@ -55,6 +56,7 @@ Game * Game::init(InputStream &stream, int allyPlayerId) {
     for (int i = 0; i < unitSize; i++) {
         int playerId = stream.readInt();
         int id = stream.readInt();
+
 
         game->units[Game::unitIndexById(id)].id = id;
         game->units[Game::unitIndexById(id)].playerId = playerId;
@@ -65,6 +67,7 @@ Game * Game::init(InputStream &stream, int allyPlayerId) {
         } else {
             game->aliveEnemyUnits.push_back(id);
         }
+        game->aliveUnits.push_back(id);
     }
 
     game->bullets = std::vector<Bullet>(stream.readInt());
@@ -78,29 +81,213 @@ Game * Game::init(InputStream &stream, int allyPlayerId) {
     for (size_t i = 0; i < game->mines.size(); i++) {
         game->mines[i] = Mine::readFrom(stream);
     }
-    std::vector<LootBox> lootBoxes = std::vector<LootBox>(stream.readInt());
 
-    game->lootHealthPacks = vector<LootBox>();
-    game->lootWeapons = vector<LootBox>();
-    game->lootMines = vector<LootBox>();
-
-    for (size_t i = 0; i < lootBoxes.size(); i++) {
-        lootBoxes[i] = LootBox::readFrom(stream);
-
-        switch (lootBoxes[i].item.get()->getType()) {
-            case ItemType ::ItemHealthPack:
-                game->lootHealthPacks.push_back(lootBoxes[i]);
-                break;
-            case ItemType ::ItemWeapon:
-                game->lootWeapons.push_back(lootBoxes[i]);
-                break;
-            case ItemType ::ItemMine:
-                game->lootMines.push_back(lootBoxes[i]);
-                break;
-        }
-    }
+    game->updateLootBoxes(stream);
 
     return Game::game.get();
+}
+
+void Game::buildPotentionalField(const Vec2Double & pos, vector<vector<int>> & field) {
+    list<pair<pair<int, int>, int>> queue = list<pair<pair<int, int>, int> >();
+    vector<vector<bool>> visitedCells(pp_width, vector<bool>(pp_height, false));
+
+    int lootX = (int)(pos.x * Consts::ppFieldSize);
+    int lootY = (int)(pos.y * Consts::ppFieldSize);
+
+    field[lootX][lootY] = 0;
+    visitedCells[lootX][lootY] = true;
+
+    queue.push_back(make_pair(make_pair(lootX, lootY) , 0));
+
+    while (queue.size()) {
+
+        auto & [point, d] = queue.front();
+        auto & [x, y] = point;
+
+        for (int ii = -1; ii <= 1; ii += 2) {
+            int jj = 0;
+            int levelX = (ii + x) / Consts::ppFieldSize;
+            int levelY = (jj + y) / Consts::ppFieldSize;
+            if (level.tiles[levelX][levelY] != Tile::WALL and d + 1 < field[levelX][levelY] and !visitedCells[ii + x][jj + y]) {
+                field[ii + x][jj + y] = d + 1;
+                queue.push_back(make_pair(make_pair(ii + x, jj + y), d + 1 ));
+                visitedCells[ii + x][jj + y] = true;
+            }
+        }
+
+        for (int jj = -1; jj <= 1; jj += 2) {
+            int ii = 0;
+            int levelX = (ii + x) / Consts::ppFieldSize;
+            int levelY = (jj + y) / Consts::ppFieldSize;
+            if (level.tiles[levelX][levelY] != Tile::WALL and d + 1 < field[levelX][levelY] and !visitedCells[ii + x][jj + y]) {
+                field[ii + x][jj + y] = d + 1;
+                queue.push_back(make_pair(make_pair(ii + x, jj + y), d + 1 ));
+                visitedCells[ii + x][jj + y] = true;
+            }
+        }
+
+        queue.pop_front();
+    }
+}
+
+
+float Game::fCost(int x, int y, int x1, int y1) {
+    return sqrt((x - x1) * (x - x1) + (y - y1) * (y - y1));
+}
+
+int Game::aStarPathInit(const Unit &u, const vector<LootBox> & loots, Debug & debug, vector<AstarNode> & allyUnitPath) {
+
+    int allyUnitPathSize = allyUnitPath.size();
+
+    this->unitAstarPath[Game::allyUnitIndexById(u.id)] = vector<AstarNode>();
+
+    Unit unit(u);
+
+    //debug.draw(CustomData::Rect(point.toFloat(), Vec2Float(1.0, 1.0), ColorFloat(1.0, .0, .0, 1.0)));
+    set<AstarNode, SortedAstarNodeComparator> sortedQueue;
+    unordered_set <AstarNode, AstarNodeHasher> queueNodes;
+
+    unordered_map<int, unordered_map<int, AstarNode>> visitedNodes;
+
+    for (int i = 0; i < Consts::predefinitionStates; ++i) {
+        visitedNodes.insert(make_pair(i, unordered_map<int, AstarNode>()));
+    }
+
+    Vec2Double point = loots[Game::nearestLootBox(loots, u.position)].position;
+
+    int goal_x = (int)(point.x * Consts::ppFieldSize);
+    int goal_y = (int)(point.y * Consts::ppFieldSize);
+
+    int start_x = (int)(unit.position.x * Consts::ppFieldSize);
+    int start_y = (int)(unit.position.y * Consts::ppFieldSize);
+
+    AstarNode startNode = {
+            .x = start_x,
+            .y = start_y,
+            .vel = 0,
+            .jump = false,
+            .jumpDown = false,
+            .timeCostFromStart = 0,
+            .distanceCostToFinish = fCost(start_x, start_y, goal_x, goal_y),
+            .unit = unit,
+            .parentNodeIndex = 0,
+            .parentNodeStateIndex = unit.stateIndex()
+    };
+
+    sortedQueue.insert(startNode);
+    queueNodes.insert(startNode);
+
+    UnitAction action;
+
+    while(sortedQueue.size() > 0) {
+
+        AstarNode currentNode = *sortedQueue.begin();
+
+        int unitRightPosNodeX = (int)((currentNode.unit.position.x + currentNode.unit.widthHalf) * Consts::ppFieldSize);
+        int unitLeftPosNodeX = (int)((currentNode.unit.position.x - currentNode.unit.widthHalf) * Consts::ppFieldSize);
+        int unitMidPosNodeX = (int)((currentNode.unit.position.x) * Consts::ppFieldSize);
+
+        Vec2Double point = loots[Game::nearestLootBox(loots, currentNode.unit.position)].position;
+
+        int goal_x = (int)(point.x * Consts::ppFieldSize);
+        int goal_y = (int)(point.y * Consts::ppFieldSize);
+
+        if ((unitLeftPosNodeX == goal_x or unitRightPosNodeX == goal_x or unitMidPosNodeX == goal_x) and currentNode.y == goal_y) {
+
+            list<AstarNode> unitTrace;
+
+            while (!(currentNode.x == start_x and currentNode.y == start_y and currentNode.unit.stateIndex() == unit.stateIndex())) {
+                unitTrace.push_back(currentNode);
+
+                currentNode = visitedNodes[currentNode.parentNodeStateIndex][currentNode.parentNodeIndex];
+
+                debug.draw(CustomData::Rect((currentNode.unit.position - Vec2Double(currentNode.unit.widthHalf, 0)).toFloat(), currentNode.unit.size.toFloat(), ColorFloat(1.0, 1.0, .0, 1.0)));
+            }
+
+            unitTrace.reverse();
+            this->unitAstarPath[Game::allyUnitIndexById(u.id)] = vector<AstarNode>(unitTrace.begin(), unitTrace.end());
+
+            return true;
+        }
+
+        sortedQueue.erase(sortedQueue.begin());
+        queueNodes.erase(currentNode);
+
+        visitedNodes[currentNode.unit.stateIndex()].insert(make_pair(currentNode.nodeIndex(), currentNode));
+
+        for (int vel = -1; vel <= 1; vel += 2) {
+            action.velocity = properties.unitMaxHorizontalSpeed * vel;
+
+            for (int jumpState = -1; jumpState <= 1; ++jumpState) {
+                Unit u(currentNode.unit);
+
+                switch(jumpState) {
+                    case -1:
+                        action.jump = false;
+                        action.jumpDown = false;
+                        break;
+                    case 0:
+                        action.jump = true;
+                        action.jumpDown = false;
+                        break;
+                    case 1:
+                        action.jump = false;
+                        action.jumpDown = true;
+                        break;
+                }
+
+                vector<Unit> allyUnits;
+                if (allyUnitPathSize > 0) {
+                    allyUnits.push_back(allyUnitPathSize > currentNode.timeCostFromStart ? allyUnitPath[currentNode.timeCostFromStart].unit : allyUnitPath[allyUnitPathSize - 1].unit);
+                }
+
+
+                u.applyAction(action, allyUnits);
+
+                int current_x = (int)(u.position.x * Consts::ppFieldSize);
+                int current_y = (int)(u.position.y * Consts::ppFieldSize);
+
+                int timeCost = currentNode.timeCostFromStart + 1;
+                float hCost = fCost(goal_x, goal_y, current_x, current_y);
+
+                AstarNode node = {
+                        .x = current_x,
+                        .y = current_y,
+                        .vel = action.velocity,
+                        .jump = action.jump,
+                        .jumpDown = action.jumpDown,
+                        .timeCostFromStart = timeCost,
+                        .distanceCostToFinish = hCost,
+                        .unit = u,
+                        .parentNodeIndex = currentNode.nodeIndex(),
+                        .parentNodeStateIndex = currentNode.unit.stateIndex()
+                        };
+
+                if (visitedNodes[u.stateIndex()].find(node.nodeIndex()) != visitedNodes[u.stateIndex()].end()) {
+                    continue;
+                }
+
+                if (queueNodes.find(node) != queueNodes.end()) {
+                    auto & n = *queueNodes.find(node);
+
+                    if (n.timeCostFromStart > timeCost) {
+                        sortedQueue.erase(n);
+
+                        n.timeCostFromStart = timeCost;
+                        n.parentNodeIndex = currentNode.nodeIndex();
+                        n.parentNodeStateIndex = currentNode.unit.stateIndex();
+
+                        sortedQueue.insert(n);
+                    }
+
+                } else {
+                    queueNodes.insert(node);
+                    sortedQueue.insert(node);
+                }
+            }
+        }
+    }
+    return -1;
 }
 
 
@@ -120,6 +307,7 @@ Game * Game::updateTick(InputStream &stream) {
 
     game->aliveAllyUnits = list<int>();
     game->aliveEnemyUnits = list<int>();
+    game->aliveUnits = list<int>();
 
     int unitSize = stream.readInt();
 
@@ -135,6 +323,7 @@ Game * Game::updateTick(InputStream &stream) {
         } else {
             game->aliveEnemyUnits.push_back(unitId);
         }
+        game->aliveUnits.push_back(unitId);
     }
 
     game->bullets = std::vector<Bullet>(stream.readInt());
@@ -150,29 +339,97 @@ Game * Game::updateTick(InputStream &stream) {
         game->mines[i] = Mine::readFrom(stream);
     }
 
-    std::vector<LootBox> lootBoxes = std::vector<LootBox>(stream.readInt());
+    game->updateLootBoxes(stream);
 
-    game->lootHealthPacks = vector<LootBox>();
-    game->lootWeapons = vector<LootBox>();
-    game->lootMines = vector<LootBox>();
+    return Game::game.get();
+}
+
+
+
+int Game::getNearestWeapon(const Vec2Double &unitPos, const vector<int> weaponIds) const {
+
+    double minDistance = INT32_MAX;
+    int nearestWeaponId = -1;
+
+    for (int weaponId : weaponIds) {
+        const LootBox & lootBox = lootWeapons[weaponId];
+
+        double sqrDistance = (lootBox.position - unitPos).sqrLen();
+        if (minDistance > sqrDistance) {
+            minDistance = sqrDistance;
+            nearestWeaponId = weaponId;
+        }
+    }
+
+    return nearestWeaponId;
+}
+
+optional<int> Game::getNearestPistol(const Vec2Double &unitPos) const {
+    if (lootWeaponPistolIds.size() == 0) {
+        return nullopt;
+    }
+
+    return getNearestWeapon(unitPos, lootWeaponPistolIds);
+}
+
+optional<int> Game::getNearestAssult(const Vec2Double &unitPos) const {
+    if (lootWeaponAssultIds.size() == 0) {
+        return nullopt;
+    }
+
+    return getNearestWeapon(unitPos, lootWeaponAssultIds);
+}
+
+
+void Game::updateLootBoxes(InputStream &stream) {
+
+
+    int lootBoxesSize = stream.readInt();
+    std::vector<LootBox> lootBoxes = std::vector<LootBox>(lootBoxesSize);
+    bool updatePPField = lootBoxesSize != (lootHealthPacks.size() + lootWeapons.size() + lootMines.size());
+
+    lootHealthPacks = vector<LootBox>();
+    lootWeapons = vector<LootBox>();
+    lootMines = vector<LootBox>();
+
+    lootWeaponIds = vector<int>();
+    lootHealPacksIds = vector<int>();
+
+    lootWeaponPistolIds = vector<int>();
+    lootWeaponAssultIds = vector<int>();
+
+    int weaponIterator = 0;
+    int healthPackIterator = 0;
 
     for (size_t i = 0; i < lootBoxes.size(); i++) {
         lootBoxes[i] = LootBox::readFrom(stream);
 
         switch (lootBoxes[i].item.get()->getType()) {
             case ItemType ::ItemHealthPack:
-                game->lootHealthPacks.push_back(lootBoxes[i]);
+                lootHealthPacks.push_back(lootBoxes[i]);
+                lootHealPacksIds.push_back(healthPackIterator);
+
+                ++healthPackIterator;
+
                 break;
             case ItemType ::ItemWeapon:
-                game->lootWeapons.push_back(lootBoxes[i]);
+                lootWeapons.push_back(lootBoxes[i]);
+                lootWeaponIds.push_back(weaponIterator);
+
+                if (dynamic_pointer_cast<Item::Weapon>(lootBoxes[i].item).get()->weaponType == WeaponType::PISTOL) {
+                    lootWeaponPistolIds.push_back(weaponIterator);
+                } else if (dynamic_pointer_cast<Item::Weapon>(lootBoxes[i].item).get()->weaponType == WeaponType::ASSAULT_RIFLE) {
+                    lootWeaponAssultIds.push_back(weaponIterator);
+                }
+                ++weaponIterator;
+
                 break;
             case ItemType ::ItemMine:
-                game->lootMines.push_back(lootBoxes[i]);
+                lootMines.push_back(lootBoxes[i]);
                 break;
         }
     }
 
-    return Game::game.get();
 }
 
 list<int> & Game::getPlayerUnits(int playerId) {

@@ -10,6 +10,8 @@
 #include <map>
 #include "Tile.hpp"
 #include "../Debug.hpp"
+#include <unordered_map>
+
 
 using namespace std;
 
@@ -17,6 +19,8 @@ class Level {
 public:
     int width;
     int height;
+
+    unordered_map<int, int> jumpPads;
 
     vector<vector<Vec2Float>> walls;
     vector<Vec2Float> standablePlaces;
@@ -35,6 +39,7 @@ public:
 
     void buildWalls();
     void buildStandablePlaces();
+    int tileIndex(int x, int y);
 };
 
 #endif

@@ -16,6 +16,7 @@
 using namespace std;
 
 class Unit;
+class Simulation;
 
 class Bullet {
 public:
@@ -43,7 +44,7 @@ public:
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
 
-    void explossion(Unit & unit, const Vec2Double & unitPosition) const;
+    void explossion(Unit & unit, const Vec2Double & unitPosition, Simulation & simulation) const;
 
     bool equal(const Bullet &bullet, double eps) const;
     void move(const Vec2Double & vel, int microTicks, Properties * properties);

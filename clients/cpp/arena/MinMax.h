@@ -31,19 +31,17 @@ private:
     Properties * properties;
     Game * game;
     Debug * debug;
-    vector<UnitAction> allyActions;
+    vector<UnitAction> unitActions;
 
     int simulationDeep = Consts::maxSimulationDeep;
     int simulationTicks = Consts::simulationTicks;
 
-    vector<vector<UnitAction>> unitBestActions;
-    vector<double> unitMaxEvaluationValue;
-    vector<vector<UnitAction>> currentUnitBestActions;
-    vector<vector<Action>> unitAction;
+    vector<UnitAction> currentUnitBestActions;
     vector<vector<Action>> verActionVariances;
-    Unit bestSimulatedUnitState;
+
     Tree tree;
 
+    int choosenEnemyId;
 
 public:
 
@@ -57,12 +55,9 @@ public:
     void generateBestAction(const Game & game, Debug & debug);
 
     double simulation(Simulation arena, int deep, int simulationUnitId, Tree * tree, int simulatedUnitId);
-    void shootLogic(UnitAction &action, const Unit &unit);
-    double evaluation(const Unit & unit, int tick);
+    void canShoot(const list<int>& allies, const list<int>& enemies, const vector<Unit> & units, const Unit &unit, UnitAction & action);
 
-    void defineTarget(Unit & unit);
-
-    bool refreshBestSimulation();
+    double evaluation(const Unit & unit, int tick, Simulation & sima);
 };
 
 

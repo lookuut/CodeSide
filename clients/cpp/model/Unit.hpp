@@ -21,7 +21,7 @@
 #include "Bullet.hpp"
 #include "LootBox.hpp"
 #include "Mine.hpp"
-
+#include <unordered_set>
 
 using namespace std;
 
@@ -35,7 +35,6 @@ public:
     Properties * properties;
     Level * level;
 
-    bool isAlive = false;
     int playerId;
     int id;
     int health;
@@ -59,7 +58,8 @@ public:
     int meanTileY;
 
     int minUpDeltaTileY;
-
+    int lastTouchedJumpPad = -1;
+    int lastTouchedJumpPadPart = -1;
     Vec2Double size;
 
     JumpState jumpState;
@@ -68,7 +68,6 @@ public:
     bool stand;
     bool onGround;
     bool onLadder;
-    bool onPlatform = false;
 
     int mines;
     std::shared_ptr<Weapon> weapon;
@@ -109,7 +108,7 @@ public:
     bool isOnGround();
     bool isOnWall();
     bool isInGround();
-    bool isOnPlatform();
+    bool isOnPlatform()const;
     bool isOnJumpPad();
     void heatRoofRoutine();
 
@@ -121,16 +120,19 @@ public:
     void applyOnGround();
     void applyJump(double speed, double maxTime);
     void applyJumpCancel();
+    void applyAction(const UnitAction & action, vector<Unit> & units);
+    int collisionWithWallMicrotick(const UnitAction & action);
 
+    void applyActionMicroticks(const UnitAction & action, vector<Unit> & units, int microticks);
 
-    bool isInside(const Vec2Double &point)const;
+    bool isInside(const Vec2Double &point) const;
     bool isOverlap(const Bullet & bullet) const;
 
     bool picUpkHealthPack(const LootBox &lootbox);
     bool pickUpWeapon(const LootBox &lootbox);
     bool picUpkMine(const LootBox &lootbox);
 
-    bool isPickUpLootbox(const LootBox &lootbox);
+    bool isPickUpLootbox(const LootBox &lootbox) const;
     void weaponRoutine(double time, const Vec2Double & aim);
     void plantMine(vector<Mine> & mines);
     void unitHorCollide(Unit & unit);
@@ -145,8 +147,17 @@ public:
                             const pair<double, double> & unitSegments,
                             int microticks);
 
-    int horFirstEvent(double velocity, int microTicksLimit, const Vec2Double & position) const;
-    int verFirstEvent(double velocity, int microTicksLimit, const Vec2Double & position, const UnitAction & action) const;
+    bool checkAim(const Unit & enemy, Vec2Double & aim, const list<int> & allies, const vector<Unit> & units) const;
+
+    int actionType() const;
+    bool shootable(const Unit &unit) const;
+
+
+    pair<int, Vec2Double> chooseEnemy(const list<int> & enemyIds, const vector<Unit> & enemies, int choosenEnemyId) const;
+
+    double enemyValue(const Unit & enemy, bool alreadyChoosed, const Vec2Double & aim) const;
+
+    int stateIndex();
 };
 
 

@@ -1,6 +1,7 @@
 #include "Mine.hpp"
 #include "../utils/Geometry.h"
 #include "Unit.hpp"
+#include "../arena/Simulation.hpp"
 
 Mine::Mine() { }
 
@@ -94,7 +95,7 @@ std::string Mine::toString() const {
 }
 
 
-void Mine::explode(vector<Unit> &units, vector<Mine> & mines, int currentMineIndex, map<int, bool> & deletedMines) {
+void Mine::explode(vector<Unit> &units, vector<Mine> & mines, int currentMineIndex, map<int, bool> & deletedMines, Simulation & simulation) {
 
     Vec2Float explodeLeftTop = Vec2Float(position.x - explosionParams.radius, position.y + explosionParams.radius);
     Vec2Float explodeRightDown = Vec2Float(position.x + explosionParams.radius, position.y - explosionParams.radius);
@@ -103,6 +104,12 @@ void Mine::explode(vector<Unit> &units, vector<Mine> & mines, int currentMineInd
 
         if (Geometry::isRectOverlap(explodeLeftTop, explodeRightDown, unit.leftTop, unit.rightDown)) {
             unit.health -= explosionParams.damage;
+
+            if (unit.playerId == simulation.game->allyPlayerId) {
+                simulation.enemyPoints += explosionParams.damage + (unit.health <= 0 ? simulation.properties->killScore : 0);
+            } else {
+                simulation.allyPoints += explosionParams.damage + (unit.health <= 0 ? simulation.properties->killScore : 0);
+            }
         }
     }
 
@@ -114,7 +121,7 @@ void Mine::explode(vector<Unit> &units, vector<Mine> & mines, int currentMineInd
             Vec2Float rightDown = Vec2Float(mines[i].position.x + mines[i].size.x / 2.0, mines[i].position.y);
 
             if (Geometry::isRectOverlap(explodeLeftTop, explodeRightDown, leftTop, rightDown)) {
-                mines[i].explode(units, mines, i, deletedMines);
+                mines[i].explode(units, mines, i, deletedMines, simulation);
             }
         }
     }
