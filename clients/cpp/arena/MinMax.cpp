@@ -6,6 +6,17 @@
 #include "../model/Game.hpp"
 #include "../utils/Geometry.h"
 #include <math.h>
+#include <iostream>
+#include <iterator>
+#include <vector>
+
+size_t UnitStateNodeHasher::operator()(const UnitStateNode &node) const {
+    return node.getNodeId() * node.getConstUnit().stateId();
+}
+
+const Unit& UnitStateNode::getConstUnit() const {
+    return world.getUnit(unitId);
+}
 
 MinMax::MinMax(Game * game, Debug * debug):
         properties(&game->properties),
@@ -17,6 +28,7 @@ MinMax::MinMax(Game * game, Debug * debug):
         debug(debug)
 {
     unitActions = vector<UnitAction>(game->properties.teamSize * 2);
+    unitsStates = vector<vector<set<UnitStateNode, UnitStateComparator>>>(properties->teamSize, vector<set<UnitStateNode, UnitStateComparator>>());
 
     verActionVariances = {
             {//Jumping process (can cancel jump), rise - maxTime > 0
@@ -70,85 +82,76 @@ double MinMax::evaluation(const Unit &unit, int tick, Simulation & sima) {
 
     double evaluateValue = 0;
 
-    if (unit.weapon == nullptr or unit.weapon.get()->type != WeaponType::PISTOL) {
-        if (auto nearestPistolId = game->getNearestPistol(unit.position)) {
-            //evaluateValue += 1.0 / (double)(game->ppVal(PPFieldType::PPWeapon, nearestPistolId.value(), unit.position)  + 1);
+    Unit * nearestEnemy = NULL;
+
+    double nearestEnemyDistance = INT32_MAX;
+    for (int enemyUnitId : game->aliveEnemyUnits) {
+        Unit * enemy = &game->units[Game::unitIndexById(enemyUnitId)];
+
+        double distance = (enemy->position - unit.position).sqrLen();
+
+        if (nearestEnemyDistance > distance) {
+            nearestEnemyDistance = distance;
+            nearestEnemy = enemy;
         }
     }
 
-    if (unit.weapon == nullptr) {
-        int nearestWeaponId = game->getNearestWeapon(unit.position, game->lootWeaponIds);
-        //evaluateValue += 1.0 / (double)(game->ppVal(PPFieldType::PPWeapon, nearestWeaponId, unit.position)  + 1);
-    } else {
-        Unit * nearestEnemy = NULL;
 
-        double nearestEnemyDistance = INT32_MAX;
-        for (int enemyUnitId : game->aliveEnemyUnits) {
-            Unit * enemy = &game->units[Game::unitIndexById(enemyUnitId)];
+    if (unit.health < nearestEnemy->health and arena.lootHealthPacks.size() > 0) {
+        LootBox * nearestHealthPack = NULL;
 
-            double distance = (enemy->position - unit.position).sqrLen();
+        double nearestHealthPackDistance = INT32_MAX;
 
-            if (nearestEnemyDistance > distance) {
-                nearestEnemyDistance = distance;
-                nearestEnemy = enemy;
-            }
-        }
+        for (LootBox & healthPack : arena.lootHealthPacks) {
 
+            if (
+                    (nearestEnemy->position.x < unit.position.x and nearestEnemy->position.x < healthPack.position.x) or
+                    (nearestEnemy->position.x > unit.position.x and nearestEnemy->position.x > healthPack.position.x) or
+                    abs(unit.position.y - nearestEnemy->position.y) > unit.size.y) {
+                double distance = (healthPack.position - unit.position).sqrLen();
 
-        if (unit.health < nearestEnemy->health and arena.lootHealthPacks.size() > 0) {
-            LootBox * nearestHealthPack = NULL;
-
-            double nearestHealthPackDistance = INT32_MAX;
-
-            for (LootBox & healthPack : arena.lootHealthPacks) {
-
-                if (
-                        (nearestEnemy->position.x < unit.position.x and nearestEnemy->position.x < healthPack.position.x) or
-                        (nearestEnemy->position.x > unit.position.x and nearestEnemy->position.x > healthPack.position.x) or
-                        abs(unit.position.y - nearestEnemy->position.y) > unit.size.y) {
-                    double distance = (healthPack.position - unit.position).sqrLen();
-
-                    if (nearestHealthPackDistance > distance) {
-                        nearestHealthPackDistance = distance;
-                        nearestHealthPack = &healthPack;
-                    }
+                if (nearestHealthPackDistance > distance) {
+                    nearestHealthPackDistance = distance;
+                    nearestHealthPack = &healthPack;
                 }
             }
+        }
 
-            if (nearestHealthPack == NULL) {
-                double distance = (nearestEnemy->position - unit.position).sqrLen();
-                evaluateValue += 1.0 - 1.0 / (distance + 1) ;
-            } else {
-                targetPos = nearestHealthPack->position;
-
-                double distance = (targetPos - unit.position).sqrLen();
-                evaluateValue += 1.0 / (distance + 1);
-            }
+        if (nearestHealthPack == NULL) {
+            double distance = (nearestEnemy->position - unit.position).sqrLen();
+            evaluateValue += 1.0 - 1.0 / (distance + 1) ;
         } else {
-            targetPos = nearestEnemy->position;
+            targetPos = nearestHealthPack->position;
 
-            double d = (targetPos - unit.position).sqrLen();
+            double distance = (targetPos - unit.position).sqrLen();
+            evaluateValue += 1.0 / (distance + 1);
+        }
+    } else {
+        targetPos = nearestEnemy->position;
 
-            bool attack = (unit.weapon.get()->params.fireRate > unit.weapon.get()->fireTimer)
-                          and (nearestEnemy->weapon == nullptr or nearestEnemy->weapon.get()->fireTimer > Consts::enemyFireTimerMin) or d > Consts::sqrMinDistanceToEnemy;
+        double d = (targetPos - unit.position).sqrLen();
 
-            if (attack) {
-                evaluateValue += 1.0 / (d + 1);
-            } else {
-                evaluateValue += 1.0 - 1.0 / d;
-            }
+        double xDiff = abs(targetPos.x - unit.position.x);
+        double yDiff = abs(targetPos.y - unit.position.y);
+
+        bool canSuicide = nearestEnemy->mines > 0 and (xDiff < properties->mineExplosionParams.radius + unit.size.x
+                                                           and ((targetPos.y < unit.position.y and yDiff < properties->mineExplosionParams.radius)
+                                                           or (targetPos.y > unit.position.y and yDiff < properties->mineExplosionParams.radius + unit.size.y)));
+
+        bool attack = ((nearestEnemy->weapon == nullptr or nearestEnemy->weapon.get()->fireTimer > Consts::enemyFireTimerMin)) and !canSuicide or d > Consts::sqrMinDistanceToEnemy;
+
+        if (attack) {
+            evaluateValue += 1.0 / (d + 1);
+        } else {
+            evaluateValue += 1.0 - 1.0 / d;
         }
     }
 
-    Unit & prevUnitState = game->units[Game::unitIndexById(unit.id)];
-
     evaluateValue += 2 * (int)(unit.weapon != nullptr) + (sima.allyPoints - sima.enemyPoints) + unit.health;
-
     evaluateValue += unit.mines / 10.0;
-    evaluateValue += unit.position.y / (level->height * level->height);
 
     //evaluateValue += prevPosDistance / (prevPosDistance + 1);
-    //evaluateValue += (unit.onGroundLadderTicks / (double)tick);
+    //evaluateValue += (world.onGroundLadderTicks / (double)tick);
 
     return evaluateValue / (double)tick;
 }
@@ -202,24 +205,7 @@ void MinMax::generateBestAction(const Game &game, Debug &debug) {
 }
 
 UnitAction MinMax::getBestAction(const Unit & unit) {
-    UnitAction & action = currentUnitBestActions[Game::allyUnitIndexById(unit.id)];
-
-    canShoot(game->aliveAllyUnits, game->aliveEnemyUnits, game->units, unit, action);
-
-    if (unit.weapon != nullptr and unit.weapon.get()->type == WeaponType::ROCKET_LAUNCHER) {
-        action.swapWeapon = true;
-    }
-
-    if (unit.weapon != nullptr and unit.weapon.get()->type != WeaponType::PISTOL) {
-        for (int weaponId : game->lootWeaponPistolIds) {
-            const LootBox & lootBox = game->lootWeapons[weaponId];
-            if (unit.isPickUpLootbox(lootBox)) {
-                action.swapWeapon = true;
-            }
-        }
-    }
-
-    return action;
+    return currentUnitBestActions[Game::allyUnitIndexById(unit.id)];
 }
 
 
@@ -273,22 +259,193 @@ double MinMax::simulation(Simulation arena, int deep, int simulationUnitId, Tree
 
 void MinMax::canShoot(const list<int>& allies, const list<int>& enemies, const vector<Unit> & units, const Unit &unit, UnitAction & action) {
 
-    if (unit.weapon == nullptr) {
-        return;
+    Vec2Double bestAim(0,0);
+    double minDistance = -1;
+
+    for (int enemyUnitId : game->aliveEnemyUnits) {
+        Unit * enemy = &game->units[Game::unitIndexById(enemyUnitId)];
+        Vec2Double aim(0, 0);
+
+        action.shoot = true;
+
+        if (unit.weapon != nullptr) {
+
+            Vec2Float unitCenter = Vec2Float(unit.position + Vec2Double(0, game->properties.unitSize.y / 2.0));
+            Vec2Float enemyCenter = Vec2Float(enemy->position + Vec2Double(0, game->properties.unitSize.y / 2.0));
+
+            aim = Vec2Double(enemyCenter.x - unitCenter.x, enemyCenter.y - unitCenter.y);
+
+            if (game->level.crossWall(unitCenter, enemyCenter)) {
+                action.shoot = false;
+            } else {
+
+                Vec2Double lowLineFromBulletCenter = aim.rotate(unit.weapon.get()->spread);
+                Vec2Double topLineFromBulletCenter = aim.rotate(-unit.weapon.get()->spread);
+
+                Vec2Double bulletLowLineDelta = lowLineFromBulletCenter.getOpponentAngle(unit.weapon.get()->params.bullet.size / 2.0, false);
+                Vec2Double bulletTopLineDelta = topLineFromBulletCenter.getOpponentAngle(unit.weapon.get()->params.bullet.size / 2.0, true);
+
+                Vec2Double lowLine = bulletLowLineDelta + lowLineFromBulletCenter;
+                Vec2Double topLine = bulletTopLineDelta + topLineFromBulletCenter;
+
+                auto lowLineCross = game->level.crossMiDistanceWall(unitCenter + bulletLowLineDelta, unitCenter + lowLine);
+                auto topLineCross = game->level.crossMiDistanceWall(unitCenter + bulletTopLineDelta, unitCenter + topLine);
+
+                action.shoot = (lowLineCross ? (lowLineCross.value() - enemyCenter).sqrLen() < (lowLineCross.value() - unitCenter).sqrLen() : true)
+                               and
+                               (topLineCross ? (topLineCross.value() - enemyCenter).sqrLen() < (topLineCross.value() - unitCenter).sqrLen() : true);
+
+
+                if (action.shoot) {
+                    for (int allyUnitId : allies) {
+                        Unit * allyUnit = &game->units[Game::unitIndexById(allyUnitId)];
+                        if (allyUnit->id != unit.id) {
+
+
+                            vector<vector<Vec2Double>> allyBorders = {
+                                    {
+                                            Vec2Double(allyUnit->position.x - allyUnit->widthHalf, allyUnit->position.y), Vec2Double(allyUnit->position.x + allyUnit->widthHalf, allyUnit->position.y)
+                                    },
+                                    {
+                                            Vec2Double(allyUnit->position.x - allyUnit->widthHalf, allyUnit->position.y), Vec2Double(allyUnit->position.x - allyUnit->widthHalf, allyUnit->position.y + allyUnit->size.y)
+                                    },
+                                    {
+                                            Vec2Double(allyUnit->position.x + allyUnit->widthHalf, allyUnit->position.y), Vec2Double(allyUnit->position.x + allyUnit->widthHalf, allyUnit->position.y + allyUnit->size.y)
+                                    },
+                                    {
+                                            Vec2Double(allyUnit->position.x - allyUnit->widthHalf, allyUnit->position.y + allyUnit->size.y), Vec2Double(allyUnit->position.x + allyUnit->widthHalf, allyUnit->position.y + allyUnit->size.y)
+                                    }
+                            };
+
+
+                            for (const vector<Vec2Double> & border : allyBorders) {
+                                if (Geometry::doIntersect(border[0], border[1], unitCenter, enemyCenter)) {
+                                    action.shoot = false;
+                                    break;
+                                } else if (Geometry::doIntersect(border[0], border[1], (unitCenter + bulletLowLineDelta),  (unitCenter + lowLine))) {
+                                    action.shoot = false;
+                                    break;
+                                } else if (Geometry::doIntersect(border[0], border[1], (unitCenter + bulletTopLineDelta),  (unitCenter + topLine))) {
+                                    action.shoot = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (action.shoot) {
+                if (minDistance < 0 or minDistance > aim.sqrLen()) {
+                    bestAim = aim;
+                    minDistance = aim.sqrLen();
+                }
+            }
+        }
     }
 
+    action.shoot = minDistance > 0;
+    action.aim = bestAim;
 
-    auto [enemyId, aim] = unit.chooseEnemy(enemies, units, choosenEnemyId);
-    const Unit & enemy = game->units[Game::unitIndexById(enemyId)];
-
-    aim.normalize();
-
-    action.aim = aim;
-    bool shoot = false;
-
-    if (unit.checkAim(enemy, aim, allies, units)) {
-        shoot = true;
+    if (!action.shoot) {
+        action.reload = true;
     }
-
-    action.shoot = shoot;
 }
+
+
+
+/*
+
+void MinMax::unitStateBootStrap(Unit &unit, int deep, const vector<UnitAction> &allyUnitActions) {
+
+    vector<set<UnitStateNode, UnitStateComparator>> & unitStates = unitsStates[Game::allyUnitIndexById(unit.id)];
+
+    UnitStateNode ssState;
+
+    if (unitStates.size() < 50 or game->newBullet) {
+
+        Simulation world(game, debug);
+        world.update();
+
+        UnitStateNode startNode = {
+                .unitId = unit.id,
+                .level = unit.jumpLevel,
+                .nodeId = UnitStateNode::getUnitNodeId(unit),
+                .action = UnitAction(),
+                .evaluationValue = preEvalVal,
+                .world = world,
+                .parentNodeId = 0,
+                .parentNodeEvaluationValue = .0
+        };
+
+        int startTick = unitStates.size() > 0 and unitStates[0].find(startNode) != unitStates[0].end() and !game->newBullet ? unitStates.size() - 1 : 0;
+
+        if (startTick == 0) {
+            unitStates.clear();
+
+            unitStates.push_back(set<UnitStateNode, UnitStateComparator>());
+            unitStates[0].insert(startNode);
+        }
+
+        vector<UnitAction> actions(properties->teamSize * 2, UnitAction());
+        UnitAction & action = actions[Game::unitIndexById(unit.id)];
+
+        for (int tick = startTick + 1; tick < startTick + deep; ++tick) {
+
+
+            auto it = unitStates[tick - 1].end();
+
+            if (unitStates[tick - 1].size() > 100) {
+                it = unitStates[tick - 1].begin();
+                std::advance(it, 100);
+            }
+
+            set<UnitStateNode, UnitStateComparator> queue(unitStates[tick - 1].begin(), it);
+
+            unitStates.push_back(set<UnitStateNode, UnitStateComparator>());
+
+            while (queue.size() > 0) {
+
+                UnitStateNode currentNode = *queue.begin();
+
+                queue.erase(currentNode);
+
+                for (int vel = -1; vel <= 1; ++vel) {
+
+                    action.velocity = properties->unitMaxHorizontalSpeed * vel;
+
+                    for (int jumpState = -1; jumpState <= 1; ++jumpState) {
+                        action.setJumpState(jumpState);
+                        Simulation world(currentNode.world);
+
+                        world.tick(actions, 1);
+
+                        Unit & u = world.getUnit(unit.id);
+
+                        double evalValue = evaluation(u, tick - startTick, world) + currentNode.evaluationValue;
+
+                        UnitStateNode node = {
+                                .unitId = unit.id,
+                                .level = world.getUnit(unit.id).jumpLevel,
+                                .nodeId = UnitStateNode::getUnitNodeId(u),
+                                .action = action,
+                                .evaluationValue = evalValue,
+                                .world = world,
+                                .parentNodeId = currentNode.getNodeId(),
+                                .parentNodeEvaluationValue = currentNode.evaluationValue
+                        };
+                        debug->draw(CustomData::Rect( Vec2Double(u.position.x - u.widthHalf, u.position.y).toFloat(), u.size.toFloat(), ColorFloat(1.0, 1.0, .0, 1.0) ));
+                        ssState.evaluationValue = currentNode.evaluationValue;
+                        ssState.nodeId = currentNode.getNodeId();
+
+                        if (unitStates[tick].find(node) != unitStates[tick].end()) {
+                            continue;
+                        }
+
+                        unitStates[tick].insert(node);
+                    }
+                }
+            }
+        }
+    }
+}*/

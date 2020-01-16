@@ -24,70 +24,247 @@ allyPlayerId(game->allyPlayerId),
 enemyPlayerId(game->enemyPlayerId),
 arena(game, debug),
 minMax(game, debug),
-game(game)
+game(game),
+debug(debug),
+enemies(game->enemies),
+weapons(game->lootWeapons),
+mines(game->lootMines),
+healthPacks(game->lootHealthPacks)
 {
     actions = vector<UnitAction>(Consts::maxUnitCount, UnitAction());
+
+    unitTarget = vector<LootBox>(game->properties.teamSize, LootBox());
+    unitTargetId = vector<int>(game->properties.teamSize, -1);
+    unitTargetType = vector<int>(game->properties.teamSize, 0);
+    suicideMines = vector<int>(game->properties.teamSize, -1);
+
+    for (int unitId : game->aliveAllyUnits) {
+        updateUnitPath(weapons, unitId, false);
+    }
+
+
+}
+
+void MyStrategy::updateUnitPath(vector<LootBox> & targets, int unitId, bool isEnemy) {
+
+    vector<AstarNode> unitPath;
+
+    if (game->properties.teamSize == 2) {
+        unitPath = game->unitAstarPath[Game::allyUnitIndexById(game->getNonEqualUnitId(unitId))];
+    }
+
+    int lootId = game->aStarPathInit(unitId, targets, *debug, unitPath, isEnemy);
+
+    if (lootId < 0) {
+        cout << "Cant find path for unit " << unitId << endl;
+    } else {
+
+        unitTargetId[Game::allyUnitIndexById(unitId)] = lootId;
+        unitTarget[Game::allyUnitIndexById(unitId)] = targets[lootId];
+
+        if (!isEnemy or targets.size() > 1) {
+            targets.erase(targets.begin() + lootId);
+        }
+    }
+}
+
+
+bool MyStrategy::canUpdateUnitPath(int unitId) {
+    if (game->newBullet) {
+        return true;
+    }
+
+    if (game->unitAstarPath[Game::allyUnitIndexById(unitId)].size() <= 1) {
+        return true;
+    }
+
+    Unit & unit = game->units[Game::unitIndexById(unitId)];
+    const Unit & trace = game->unitAstarPath[Game::allyUnitIndexById(unitId)][0].getConstUnit();
+
+    if (trace.position.distSqr(unit.position) > 0.001) {
+        return true;
+    }
+
+    return false;
 }
 
 void MyStrategy::tick(Debug &debug) {
 
     chrono::system_clock::time_point start = chrono::system_clock::now();
-    if (game->currentTick % 5 == 0) {
-        const Unit & unit = game->units[Game::unitIndexById(game->aliveAllyUnits.front())];
-        vector<AstarNode> unitPath;
 
-        if (game->properties.teamSize == 2) {
-            AstarNode node = {
-                    .x = 0,
-                    .y = 0,
-                    .vel = 0,
-                    .jump = false,
-                    .jumpDown = false,
-                    .timeCostFromStart = 0,
-                    .distanceCostToFinish = 0,
-                    .unit = game->units[Game::unitIndexById(game->aliveAllyUnits.back())],
-                    .parentNodeIndex = 0,
-                    .parentNodeStateIndex = 0
-            };
+    enemies = game->enemies;
+    weapons = game->lootWeapons;
+    mines = game->lootMines;
+    healthPacks = game->lootHealthPacks;
 
-            unitPath.push_back(node);
-        }
+    vector<int> noUpdateUnits;
 
-        game->aStarPathInit(unit, game->lootMines, debug, unitPath);
-
-        if (game->properties.teamSize == 2) {
-            const Unit & unit = game->units[Game::unitIndexById(game->aliveAllyUnits.back())];
-            game->aStarPathInit(unit, game->lootMines, debug, game->unitAstarPath[Game::allyUnitIndexById(game->aliveAllyUnits.front())]);
+    for (int unitId : game->aliveAllyUnits) {
+        if (!canUpdateUnitPath(unitId) and unitTargetId[Game::allyUnitIndexById(unitId)] >= 0) {
+            noUpdateUnits.push_back(unitId);
         }
     }
 
-    //minMax.generateBestAction(*game, debug);
+    for (int unitId : noUpdateUnits) {
+        Unit & unit = game->units[Game::unitIndexById(unitId)];
+
+        int target = unitTargetId[Game::allyUnitIndexById(unitId)];
+
+        if (unit.weapon == nullptr) {
+            weapons.erase(weapons.begin() + target);
+        } else if (unit.health <= 50 and healthPacks.size() > 0) {
+            healthPacks.erase(healthPacks.begin() + target);
+        }
+    }
+
+    for (int unitId : game->aliveAllyUnits) {
+        Unit & unit = game->units[Game::unitIndexById(unitId)];
+
+        if (canUpdateUnitPath(unitId)) {
+            if (unit.weapon == nullptr) {
+                unitTargetType[Game::allyUnitIndexById(unitId)] = 0;
+                updateUnitPath(weapons, unitId, false);
+            } else if (unit.health <= 50 and healthPacks.size() > 0) {
+                unitTargetType[Game::allyUnitIndexById(unitId)] = 2;
+                updateUnitPath(healthPacks, unitId, false);
+            } else {
+                unitTargetType[Game::allyUnitIndexById(unitId)] = 3;
+                updateUnitPath(enemies, unitId, true);
+            }
+        }
+    }
+
+    minMax.generateBestAction(*game, debug);
 
     chrono::system_clock::time_point end = chrono::system_clock::now();
     long micros = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     cout << "Tick " << game->currentTick << " perfomance " << micros << endl;
 }
 
+void MyStrategy::suicide(const Unit &unit, UnitAction & action) {
 
-UnitAction MyStrategy::getAction(const Unit &unit, Debug & debug) {
+    if (suicideMines[Game::allyUnitIndexById(unit.id)] == 0) {
+        action.velocity = 0;
+        action.jump = false;
+        action.jumpDown = false;
+        action.aim = Vec2Double(0, -1);
+        action.shoot = true;
+        return;
+    }
 
-    UnitAction action;
-
-    if (game->unitAstarPath[Game::allyUnitIndexById(unit.id)].size() > 0) {
-        AstarNode & node = game->unitAstarPath[Game::allyUnitIndexById(unit.id)].front();
-
-        action.velocity = node.vel;
-        action.jump = node.jump;
-        action.jumpDown = node.jumpDown;
-
-        game->unitAstarPath[Game::allyUnitIndexById(unit.id)].erase(game->unitAstarPath[Game::allyUnitIndexById(unit.id)].begin());
+    if (suicideMines[Game::allyUnitIndexById(unit.id)] > 0) {
+        action.plantMine = true;
+        action.velocity = 0;
+        action.jump = false;
+        action.jumpDown = false;
+        action.aim = Vec2Double(0, -1);
+        suicideMines[Game::allyUnitIndexById(unit.id)]--;
+        return;
     }
 
 
-    return action;
-    //return simulationTest(unit, game, debug);
-    //return minMax.getBestAction(unit);
+    if (unit.mines <= 0 or !unit.canPlantMine() or unit.weapon == nullptr) {
+        return;
+    }
+
+    int ticks = ceil(unit.weapon.get()->fireTimer * properties->ticksPerSecond);
+
+    if (ticks > 1) {
+        return;
+    }
+
+    Vec2Float leftTop(unit.position.x - properties->mineExplosionParams.radius, unit.position.y + properties->mineExplosionParams.radius);
+    Vec2Float rightDown(unit.position.x + properties->mineExplosionParams.radius, unit.position.y - properties->mineExplosionParams.radius);
+
+    vector<int> explodedUnits;
+    for (int unitId : game->aliveUnits) {
+        Unit & unit = game->units[Game::unitIndexById(unitId)];
+
+        if (Geometry::isRectOverlap(leftTop, rightDown, unit.leftTop, unit.rightDown)) {
+            explodedUnits.push_back(unit.id);
+        }
+    }
+
+    if (explodedUnits.size() == 1) {
+        return;
+    }
+
+    int allyDamageTaken = 0;
+    int enemyDamageTaken = 0;
+    int allyScore = 0;
+    int enemyScore = 0;
+
+    suicideMines[Game::allyUnitIndexById(unit.id)] = -1;
+
+    for (int i = 0; i < min(unit.mines, 2); ++i) {
+
+        for (int unitId : explodedUnits) {
+            Unit & unit = game->units[Game::unitIndexById(unitId)];
+
+            if (unit.health <= 0) {
+                continue;
+            }
+
+            int damageScore = min(properties->mineExplosionParams.damage, unit.health);
+
+            unit.health -= properties->mineExplosionParams.damage;
+
+            if (unit.playerId == game->allyPlayerId) {
+                enemyScore += (unit.health <= 0 ? properties->killScore : 0);
+                allyDamageTaken += damageScore;
+            } else {
+                allyScore += (unit.health <= 0 ? properties->killScore : 0);
+                allyScore += damageScore;
+                enemyDamageTaken += damageScore;
+            }
+        }
+
+        if ((allyDamageTaken <= enemyDamageTaken and allyScore >= properties->killScore and allyScore > enemyScore and game->players[game->allyPlayerId].score + allyScore > game->players[game->enemyPlayerId].score + enemyScore)) {
+            suicideMines[Game::allyUnitIndexById(unit.id)]++;
+
+            action.plantMine = true;
+            action.velocity = 0;
+            action.jump = false;
+            action.jumpDown = false;
+            action.aim = Vec2Double(0, -1);
+            action.shoot = false;
+        }
+    }
 }
+
+UnitAction MyStrategy::getAction(const Unit &unit, Debug & debug) {
+
+    vector<AstarNode> & unitPath = game->unitAstarPath[Game::allyUnitIndexById(unit.id)];
+
+    UnitAction action;
+
+    if (unitPath.size() > 1 and unit.health <= unitPath.back().getConstUnit().health and !(unitTargetType[Game::allyUnitIndexById(unit.id)] == 3 and unit.shootable(unitTarget[Game::allyUnitIndexById(unit.id)]))) {
+        action.velocity = unitPath[1].vel;
+        action.jump = unitPath[1].jump;
+        action.jumpDown = unitPath[1].jumpDown;
+        unitPath.erase(unitPath.begin());
+    } else {
+        action = minMax.getBestAction(unit);
+    }
+
+    minMax.canShoot(game->aliveAllyUnits, game->aliveEnemyUnits, game->units, unit, action);
+
+    if (unit.weapon != nullptr and unit.weapon.get()->type == WeaponType::ROCKET_LAUNCHER) {
+        action.swapWeapon = true;
+    }
+
+    if (unit.weapon != nullptr and unit.weapon.get()->type != WeaponType::ASSAULT_RIFLE) {
+        for (int weaponId : game->lootWeaponAssultIds) {
+            const LootBox & lootBox = game->lootWeapons[weaponId];
+            if (unit.isPickUpLootbox(lootBox)) {
+                action.swapWeapon = true;
+            }
+        }
+    }
+
+    return action;
+}
+//return simulationTest(world, game, debug);
 
 bool MyStrategy::simulationEqualTests(const Unit &simulatedUnit, const Unit &unit, const Game &game) const {
     int goThroughStarisBugTick = 24803;
@@ -144,7 +321,7 @@ UnitAction MyStrategy::simulationTest(const Unit &unit, const Game &game, Debug 
         //arena.update(game.allyUnits, game.bullets, game.mines, game.lootHealthPacks, game.lootWeapons, game.lootMines);
     }
 
-    //Unit & simulatedUnit = arena.allyUnits[unitsIndex[Game::unitIndexById(unit.id)]];
+    //Unit & simulatedUnit = arena.allyUnits[unitsIndex[Game::unitIndexById(world.id)]];
     Unit  simulatedUnit;
 
     if (!simulationEqualTests(simulatedUnit, unit, game)) {
@@ -246,7 +423,7 @@ UnitAction MyStrategy::simulationTest(const Unit &unit, const Game &game, Debug 
 }
 
 /*
-    Unit testUnit(unit);
+    Unit testUnit(world);
     testUnit.position.x = 32.820000000005315;
     testUnit.position.y = 19.503333333336659;
 

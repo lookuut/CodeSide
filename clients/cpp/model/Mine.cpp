@@ -2,6 +2,7 @@
 #include "../utils/Geometry.h"
 #include "Unit.hpp"
 #include "../arena/Simulation.hpp"
+#include "Game.hpp"
 
 Mine::Mine() { }
 

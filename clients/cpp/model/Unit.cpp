@@ -64,7 +64,8 @@ leftPosTileX(unit.leftPosTileX),
 rightPosTileX(unit.rightPosTileX),
 topTileY(unit.topTileY),
 meanTileY(unit.meanTileY),
-minUpDeltaTileY(unit.minUpDeltaTileY)
+minUpDeltaTileY(unit.minUpDeltaTileY),
+jumpLevel(unit.jumpLevel)
 {
     if (unit.weapon) {
         weapon = make_shared<Weapon>(
@@ -95,6 +96,7 @@ void Unit::init(InputStream &stream, Properties *properties, Level *level) {
     widthHalf = size.x / 2.0;
     onGroundLadderTicks = 0;
     updateTilePos();
+    jumpLevel = position.y * Consts::ppFieldSize;
 
     if (stream.readBool()) {
         weapon = std::shared_ptr<Weapon>(new Weapon());
@@ -218,8 +220,18 @@ bool Unit::isOnLadder() {
     return level->tiles[posTileX][posTileY] == Tile::LADDER or level->tiles[posTileX][posTileY] == Tile::LADDER;
 }
 
-bool Unit::isOnGround() {
-    return isOnLadder() or isOnPlatform() or level->tiles[leftPosTileX][minUpDeltaTileY] == Tile::WALL or level->tiles[rightPosTileX][minUpDeltaTileY] == Tile::WALL;
+bool Unit::canPlantMine() const {
+
+    Tile & mTile = level->tiles[position.x][position.y - 1.0e-6];
+    Tile & lTile = level->tiles[position.x - properties->mineSize.x / 2.0][position.y - 1.0e-6];
+    Tile & rTile = level->tiles[position.x + properties->mineSize.x / 2.0][position.y - 1.0e-6];
+
+    Tile & tmTile = level->tiles[position.x][position.y + 1.0e-6];
+    Tile & tlTile = level->tiles[position.x - properties->mineSize.x / 2.0][position.y + 1.0e-6];
+    Tile & trTile = level->tiles[position.x + properties->mineSize.x / 2.0][position.y + 1.0e-6];
+
+    return (mTile == Tile::WALL or mTile == Tile::PLATFORM) and (lTile == Tile::WALL or lTile == Tile::PLATFORM) and (rTile == Tile::WALL or rTile == Tile::PLATFORM) and jumpState.canJump
+    and tmTile == Tile::EMPTY and tlTile == Tile::EMPTY and trTile == Tile::EMPTY;
 }
 
 bool Unit::isInGround() {
@@ -322,7 +334,7 @@ void Unit::heatRoofRoutine() {
 
 void Unit::verticalWallCollision() {
 
-    applyOnGround();
+
 
     double distance = prevPosition.y - (double)posTileY - 1.0;
 
@@ -331,6 +343,8 @@ void Unit::verticalWallCollision() {
     } else {
         position.y = prevPosition.y;
     }
+
+    applyOnGround();
 
     updateTilePos();
     updateMoveState();
@@ -364,6 +378,7 @@ void Unit::applyOnGround() {
     jumpState.canCancel = true;
     jumpState.speed = properties->unitJumpSpeed;
     jumpState.maxTime = properties->unitJumpTime;
+    jumpLevel = (position.y + 1.0e-6) * Consts::ppFieldSize;
 
     onGround = true;
     onLadder = isOnLadder();
@@ -444,7 +459,7 @@ bool Unit::isPickUpLootbox(const LootBox &lootBox) const {
 }
 
 
-void Unit::applyActionMicroticks(const UnitAction &action, vector<Unit> &units, int microticks) {
+void Unit::applyActionMicroticks(const UnitAction &action, vector<Unit> &units, int microticks, const list<int> & aliveUnits) {
     double microTicksPerSecond =  properties->updatesPerSecond * microticks;
 
     weaponRoutine(microTicksPerSecond, action.aim);
@@ -458,7 +473,9 @@ void Unit::applyActionMicroticks(const UnitAction &action, vector<Unit> &units, 
         applyJumpPad(properties->jumpPadJumpSpeed, properties->jumpPadJumpTime);
     }
 
-    for (Unit & nearUnit : units) {
+    for (int unitId : aliveUnits) {
+        Unit & nearUnit = units[Game::unitIndexById(unitId)];
+
         if (nearUnit.id != id) {
             unitHorCollide(nearUnit);
         }
@@ -503,7 +520,9 @@ void Unit::applyActionMicroticks(const UnitAction &action, vector<Unit> &units, 
         applyOnGround();
     }
 
-    for (Unit & nearUnit : units) {
+    for (int unitId : aliveUnits) {
+        Unit & nearUnit = units[Game::unitIndexById(unitId)];
+
         if (nearUnit.id != id) {
             unitVerCollide(nearUnit);
         }
@@ -580,15 +599,15 @@ int Unit::collisionWithWallMicrotick(const UnitAction &action) {
     return properties->updatesPerTick;
 }
 
-void Unit::applyAction(const UnitAction &action, vector<Unit> & units) {
+void Unit::applyAction(const UnitAction &action, vector<Unit> & units, const list<int> & aliveUnits) {
 
     int microtick = collisionWithWallMicrotick(action) + 1;
 
     if (microtick > 0 and microtick < properties->updatesPerTick) {
-        applyActionMicroticks(action, units, microtick);
-        applyActionMicroticks(action, units, properties->updatesPerTick - microtick);
+        applyActionMicroticks(action, units, microtick, aliveUnits);
+        applyActionMicroticks(action, units, properties->updatesPerTick - microtick, aliveUnits);
     } else {
-        applyActionMicroticks(action, units, properties->updatesPerTick);
+        applyActionMicroticks(action, units, properties->updatesPerTick, aliveUnits);
     }
 }
 
@@ -680,7 +699,7 @@ void Unit:: unitHorCollide(Unit & unit) {
 
             Tile upTile = level->tiles[leftTileX][topTileY];
             Tile meanTile = level->tiles[leftTileX][meanTileY];
-            Tile downTile = level->tiles[leftTileX][posTileY];
+            Tile downTile = level->tiles[leftTileX][position.y + Consts::eps];
 
             if (upTile == Tile::WALL or meanTile == Tile::WALL or downTile == Tile::WALL) {
                 position.x = leftTileX + 1.0 + widthHalf;
@@ -797,9 +816,9 @@ pair<double, double> Unit::setFrontSegments(const Vec2Double & dir, Vec2Double &
 bool Unit::checkAim(const Unit & enemy, Vec2Double & aim, const list<int> & allies, const vector<Unit> & units) const {
 
     Vec2Float unitCenter(position.x, position.y + size.y / 2.0);
-    Vec2Double targetPoint = position + Vec2Double(0, size.y / 2.0) + aim;
+    Vec2Double targetPoint(enemy.position.x, enemy.position.y + size.y / 2.0);
 
-    if (level->crossWall(unitCenter, targetPoint.toFloat())) {
+    if (level->crossWall(unitCenter, targetPoint.toFloat()) != nullopt) {
         return false;
     }
 
@@ -884,10 +903,9 @@ int Unit::actionType() const {
 }
 
 
-bool Unit::shootable(const Unit &unit) const {
+bool Unit::shootable(const LootBox &unit) const {
     Vec2Float targetPoint(unit.position.x, unit.position.y + unit.size.y / 2.0);
     Vec2Float unitCenter(position.x, position.y + size.y / 2.0);
-
 
     return level->crossWall(unitCenter, targetPoint) == nullopt;
 }
@@ -902,7 +920,7 @@ pair<int, Vec2Double> Unit::chooseEnemy(const list<int> &enemyIds, const vector<
     for (int enemyId : enemyIds) {
         const Unit & enemy = enemies[Game::unitIndexById(enemyId)];
 
-        Vec2Double aim = (Vec2Double(enemy.position.x, enemy.position.y + enemy.size.y / 2.0)  - Vec2Double(position.x, position.y + size.y / 2.0));
+        Vec2Double aim = (Vec2Double(enemy.position.x, enemy.position.y + enemy.size.y / 2.0) - Vec2Double(position.x, position.y + size.y / 2.0));
 
         double enemyVal = enemyValue(enemy, enemyId == choosenEnemyId, aim);
 
@@ -918,7 +936,21 @@ pair<int, Vec2Double> Unit::chooseEnemy(const list<int> &enemyIds, const vector<
 
 double Unit::enemyValue(const Unit &enemy, bool alreadyChoosed, const Vec2Double & aim) const {
 
-    return (1.0  - 1.0 / aim.sqrLen()) + (double)alreadyChoosed + enemy.health / (double)health + weapon.get()->lastAngle != Consts::noLastAngleValue * abs(aim.angle(X_AXIS) - weapon.get()->lastAngle);
+    return (1.0  - 1.0 / aim.sqrLen());// + (double)alreadyChoosed + enemy.health / (double)health + weapon.get()->lastAngle != Consts::noLastAngleValue * abs(aim.angle(X_AXIS) - weapon.get()->lastAngle);
+}
+
+int Unit::stateId() const {//@TODO do something with jump pad
+    if (jumpState.canJump and jumpState.canCancel) {//onGround or jumping
+        return 1;
+    }
+
+    if (!jumpState.canJump and !jumpState.canCancel) {//Fall
+        return 2;
+    }
+
+    if (jumpState.canJump and !jumpState.canCancel) {//Jump pad
+        return 3;
+    }
 }
 
 int Unit::stateIndex() {

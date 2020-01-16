@@ -16,6 +16,10 @@ template <typename T> int sgn(T val) {
     return (T(0) <= val) - (val < T(0));
 }
 
+Simulation::Simulation() {
+
+}
+
 Simulation::Simulation(Game * game, Debug * debug): properties(&game->properties), level(&game->level), debug(debug), game(game) {
     microTicksPerSecond = 1.0 / (properties->ticksPerSecond * Consts::microticks);
 }
@@ -300,10 +304,10 @@ void Simulation::mineActivate(const Unit &unit) {
 }
 
 
-void Simulation::unitTick(Unit &unit, vector<Unit> &units, const UnitAction & action) {
+void Simulation::unitTick(Unit &unit, const UnitAction & action) {
     pickUpLoots(unit);
 
-    unit.applyAction(action, units);
+    unit.applyAction(action, units, game->aliveUnits);
 
     bulletOverlapWithUnit(unit);
     mineActivate(unit);
@@ -322,7 +326,7 @@ void Simulation::tick(const vector<UnitAction> & actions, int ticks) {
             for (int & unitId: game->aliveAllyUnits) {
                 Unit & unit = units[Game::unitIndexById(unitId)];
                 const UnitAction &action = actions[Game::unitIndexById(unit.id)];
-                unitTick(unit, units, action);
+                unitTick(unit, action);
             }
 
             mineMicrotick();
@@ -334,4 +338,9 @@ void Simulation::tick(const vector<UnitAction> & actions, int ticks) {
     }
 
     currentTick += ticks;
+}
+
+
+Unit& Simulation::getUnit(int unitId) {
+    return units[Game::unitIndexById(unitId)];
 }

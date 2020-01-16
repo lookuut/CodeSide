@@ -15,11 +15,14 @@
 #include "Mine.hpp"
 #include "Item.hpp"
 #include "../Consts.h"
+#include "../arena/Simulation.hpp"
 #include <limits>
 
 typedef struct AstarNode{
     int x;
     int y;
+
+    int unitId;
 
     double vel;
 
@@ -29,52 +32,33 @@ typedef struct AstarNode{
     mutable int timeCostFromStart;//cost from start node
     float distanceCostToFinish;//cost to end node
 
-    mutable Unit unit;
+    mutable Simulation world;
 
     mutable int parentNodeIndex;
     mutable int parentNodeStateIndex;
 
     bool operator==(const AstarNode & node) const{
-        return (node.x + node.y * node.unit.level->width * Consts::ppFieldSize) == (x + y * unit.level->width * Consts::ppFieldSize);
+        return (node.x + node.y * node.world.level->width * Consts::ppFieldSize) == (x + y * world.level->width * Consts::ppFieldSize);
     }
 
     int nodeIndex() const {
-        return x + y * unit.level->width * Consts::ppFieldSize;
+        return x + y * world.level->width * Consts::ppFieldSize;
     }
+
+    Unit & getUnit();
+
+    const Unit & getConstUnit() const;
+
 
 } AstarNode;
 
 
 struct AstarNodeHasher {
-    size_t operator() (const AstarNode &node) const
-    {
-        return node.x + node.y * node.unit.level->width * Consts::ppFieldSize + node.unit.stateIndex() * node.unit.level->height * Consts::ppFieldSize * node.unit.level->width * Consts::ppFieldSize;
-    }
+    size_t operator() (const AstarNode &node) const;
 };
 
 struct SortedAstarNodeComparator {
-    bool operator() (const AstarNode &leftNode, const AstarNode &rightNode) const
-    {
-
-        if (leftNode.timeCostFromStart + leftNode.distanceCostToFinish < rightNode.timeCostFromStart + rightNode.distanceCostToFinish) {
-            return true;
-        }
-
-        if (leftNode.timeCostFromStart + leftNode.distanceCostToFinish == rightNode.timeCostFromStart + rightNode.distanceCostToFinish and leftNode.timeCostFromStart < rightNode.timeCostFromStart) {
-            return true;
-        }
-
-        if (leftNode.timeCostFromStart + leftNode.distanceCostToFinish == rightNode.timeCostFromStart + rightNode.distanceCostToFinish and leftNode.timeCostFromStart == rightNode.timeCostFromStart and leftNode.unit.stateIndex() < rightNode.unit.stateIndex()) {
-            return true;
-        }
-
-        if (leftNode.timeCostFromStart + leftNode.distanceCostToFinish == rightNode.timeCostFromStart + rightNode.distanceCostToFinish and leftNode.timeCostFromStart == rightNode.timeCostFromStart and leftNode.unit.stateIndex() == rightNode.unit.stateIndex() and leftNode.nodeIndex() < rightNode.nodeIndex()) {
-            return true;
-        }
-
-        return false;
-
-    }
+    bool operator() (const AstarNode &leftNode, const AstarNode &rightNode) const;
 };
 
 
@@ -112,9 +96,13 @@ public:
 
 
     std::vector<LootBox> lootWeapons;
+    vector<LootBox> enemies;
+
     vector<int> lootWeaponIds;
     vector<int> lootWeaponPistolIds;
     vector<int> lootWeaponAssultIds;
+
+    bool newBullet;
 
     std::vector<LootBox> lootMines;
 
@@ -130,6 +118,9 @@ public:
 
     static std::list<int> & getPlayerUnits(int playerId);
 
+    int getNonEqualUnitId(int unitId) {
+        return aliveAllyUnits.front() == unitId ? aliveAllyUnits.back() : aliveAllyUnits.front();
+    }
 
     optional<int> getNearestPistol(const Vec2Double & unitPos) const;
     optional<int> getNearestAssult(const Vec2Double & unitPos) const;
@@ -148,6 +139,10 @@ public:
 
     inline static int allyUnitIndexById(int id) {
         return (id - 3) / 2;
+    }
+
+    Unit & getUnit(int unitId) {
+        return units[Game::unitIndexById(unitId)];
     }
 
     inline static int nearestLootBox(const vector<LootBox> & loots, const Vec2Double & pos) {
@@ -169,7 +164,7 @@ public:
 
 
     void updateLootBoxes(InputStream &stream);
-    int aStarPathInit(const Unit & unit, const vector<LootBox> & loots, Debug & debug, vector<AstarNode> & allyUnitPath);
+    int aStarPathInit(int unitId, const vector<LootBox> & loots, Debug & debug, vector<AstarNode> & allyUnitPath, bool isEnemy = false);
 
     ~Game();
 

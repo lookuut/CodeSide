@@ -1,7 +1,48 @@
 #include "Game.hpp"
 #include <set>
 
+#include "../arena/Simulation.hpp"
+#include "../utils/Geometry.h"
+
 unique_ptr<Game> Game::game;
+
+
+Unit& AstarNode::getUnit() {
+    return world.units[Game::unitIndexById(unitId)];
+}
+
+const Unit& AstarNode::getConstUnit() const {
+    return world.units[Game::unitIndexById(unitId)];
+}
+
+bool SortedAstarNodeComparator::operator() (const AstarNode &leftNode, const AstarNode &rightNode) const {
+
+    if (leftNode.getConstUnit().health > rightNode.getConstUnit().health) {
+        return true;
+    }
+
+    if (leftNode.getConstUnit().health == rightNode.getConstUnit().health and leftNode.timeCostFromStart + leftNode.distanceCostToFinish < rightNode.timeCostFromStart + rightNode.distanceCostToFinish) {
+        return true;
+    }
+
+    if (leftNode.getConstUnit().health == rightNode.getConstUnit().health and leftNode.timeCostFromStart + leftNode.distanceCostToFinish == rightNode.timeCostFromStart + rightNode.distanceCostToFinish and leftNode.timeCostFromStart < rightNode.timeCostFromStart) {
+        return true;
+    }
+
+    if (leftNode.getConstUnit().health == rightNode.getConstUnit().health and leftNode.timeCostFromStart + leftNode.distanceCostToFinish == rightNode.timeCostFromStart + rightNode.distanceCostToFinish and leftNode.timeCostFromStart == rightNode.timeCostFromStart and leftNode.world.units[Game::unitIndexById(leftNode.unitId)].stateIndex() < rightNode.world.units[Game::unitIndexById(rightNode.unitId)].stateIndex()) {
+        return true;
+    }
+
+    if (leftNode.getConstUnit().health == rightNode.getConstUnit().health and leftNode.timeCostFromStart + leftNode.distanceCostToFinish == rightNode.timeCostFromStart + rightNode.distanceCostToFinish and leftNode.timeCostFromStart == rightNode.timeCostFromStart and leftNode.world.units[Game::unitIndexById(leftNode.unitId)].stateIndex() == rightNode.world.units[Game::unitIndexById(rightNode.unitId)].stateIndex() and leftNode.nodeIndex() < rightNode.nodeIndex()) {
+        return true;
+    }
+
+    return false;
+}
+
+size_t AstarNodeHasher::operator()(const AstarNode &node) const {
+    return node.x + node.y * node.world.level->width * Consts::ppFieldSize + node.world.units[Game::unitIndexById(node.unitId)].stateIndex() * node.world.level->height * Consts::ppFieldSize * node.world.level->width * Consts::ppFieldSize;
+}
 
 Game::Game() { }
 
@@ -10,6 +51,7 @@ Game::~Game() {
 
 Game * Game::init(InputStream &stream, int allyPlayerId) {
     game = make_unique<Game>(Game());
+    game->newBullet = false;
 
     game->allyPlayerId = allyPlayerId;
     game->currentTick = stream.readInt();
@@ -66,6 +108,11 @@ Game * Game::init(InputStream &stream, int allyPlayerId) {
             game->aliveAllyUnits.push_back(id);
         } else {
             game->aliveEnemyUnits.push_back(id);
+            game->enemies.push_back(LootBox(
+                    game->units[Game::unitIndexById(id)].position,
+                    game->units[Game::unitIndexById(id)].size,
+                    nullptr)
+                    );
         }
         game->aliveUnits.push_back(id);
     }
@@ -135,13 +182,16 @@ float Game::fCost(int x, int y, int x1, int y1) {
     return sqrt((x - x1) * (x - x1) + (y - y1) * (y - y1));
 }
 
-int Game::aStarPathInit(const Unit &u, const vector<LootBox> & loots, Debug & debug, vector<AstarNode> & allyUnitPath) {
+int Game::aStarPathInit(int unitId, const vector<LootBox> & loots, Debug & debug, vector<AstarNode> & allyUnitPath, bool isEnemy) {
+
+    vector<UnitAction> unitActions(properties.teamSize * 2, UnitAction());
+
+    Simulation sima(this, &debug);
+    sima.update();
 
     int allyUnitPathSize = allyUnitPath.size();
 
-    this->unitAstarPath[Game::allyUnitIndexById(u.id)] = vector<AstarNode>();
-
-    Unit unit(u);
+    this->unitAstarPath[Game::allyUnitIndexById(unitId)] = vector<AstarNode>();
 
     //debug.draw(CustomData::Rect(point.toFloat(), Vec2Float(1.0, 1.0), ColorFloat(1.0, .0, .0, 1.0)));
     set<AstarNode, SortedAstarNodeComparator> sortedQueue;
@@ -153,7 +203,9 @@ int Game::aStarPathInit(const Unit &u, const vector<LootBox> & loots, Debug & de
         visitedNodes.insert(make_pair(i, unordered_map<int, AstarNode>()));
     }
 
-    Vec2Double point = loots[Game::nearestLootBox(loots, u.position)].position;
+    Unit & unit = units[Game::unitIndexById(unitId)];
+
+    Vec2Double point = loots[Game::nearestLootBox(loots, unit.position)].position;
 
     int goal_x = (int)(point.x * Consts::ppFieldSize);
     int goal_y = (int)(point.y * Consts::ppFieldSize);
@@ -161,65 +213,66 @@ int Game::aStarPathInit(const Unit &u, const vector<LootBox> & loots, Debug & de
     int start_x = (int)(unit.position.x * Consts::ppFieldSize);
     int start_y = (int)(unit.position.y * Consts::ppFieldSize);
 
+
     AstarNode startNode = {
             .x = start_x,
             .y = start_y,
+            .unitId = unitId,
             .vel = 0,
             .jump = false,
             .jumpDown = false,
             .timeCostFromStart = 0,
             .distanceCostToFinish = fCost(start_x, start_y, goal_x, goal_y),
-            .unit = unit,
+            .world = sima,
             .parentNodeIndex = 0,
-            .parentNodeStateIndex = unit.stateIndex()
+            .parentNodeStateIndex = sima.units[Game::unitIndexById(unitId)].stateIndex()
     };
 
     sortedQueue.insert(startNode);
     queueNodes.insert(startNode);
 
-    UnitAction action;
 
     while(sortedQueue.size() > 0) {
 
         AstarNode currentNode = *sortedQueue.begin();
 
-        int unitRightPosNodeX = (int)((currentNode.unit.position.x + currentNode.unit.widthHalf) * Consts::ppFieldSize);
-        int unitLeftPosNodeX = (int)((currentNode.unit.position.x - currentNode.unit.widthHalf) * Consts::ppFieldSize);
-        int unitMidPosNodeX = (int)((currentNode.unit.position.x) * Consts::ppFieldSize);
-
-        Vec2Double point = loots[Game::nearestLootBox(loots, currentNode.unit.position)].position;
+        const LootBox & loot = loots[Game::nearestLootBox(loots, currentNode.getUnit().position)];
+        Vec2Double point = loot.position;
 
         int goal_x = (int)(point.x * Consts::ppFieldSize);
         int goal_y = (int)(point.y * Consts::ppFieldSize);
 
-        if ((unitLeftPosNodeX == goal_x or unitRightPosNodeX == goal_x or unitMidPosNodeX == goal_x) and currentNode.y == goal_y) {
+        if (currentNode.getConstUnit().isPickUpLootbox(loot) or (isEnemy and currentNode.getConstUnit().shootable(loot))) {
 
             list<AstarNode> unitTrace;
 
-            while (!(currentNode.x == start_x and currentNode.y == start_y and currentNode.unit.stateIndex() == unit.stateIndex())) {
+            while (!(currentNode.x == start_x and currentNode.y == start_y and currentNode.getUnit().stateIndex() == unit.stateIndex())) {
                 unitTrace.push_back(currentNode);
 
                 currentNode = visitedNodes[currentNode.parentNodeStateIndex][currentNode.parentNodeIndex];
 
-                debug.draw(CustomData::Rect((currentNode.unit.position - Vec2Double(currentNode.unit.widthHalf, 0)).toFloat(), currentNode.unit.size.toFloat(), ColorFloat(1.0, 1.0, .0, 1.0)));
+                //debug.draw(CustomData::Rect((currentNode.getUnit().position - Vec2Double(currentNode.getUnit().widthHalf, 0)).toFloat(), currentNode.getUnit().size.toFloat(), ColorFloat(1.0, 1.0, .0, 1.0)));
             }
 
+            unitTrace.push_back(currentNode);
             unitTrace.reverse();
-            this->unitAstarPath[Game::allyUnitIndexById(u.id)] = vector<AstarNode>(unitTrace.begin(), unitTrace.end());
+            this->unitAstarPath[Game::allyUnitIndexById(unitId)] = vector<AstarNode>(unitTrace.begin(), unitTrace.end());
 
-            return true;
+            return Game::nearestLootBox(loots, currentNode.getUnit().position);
         }
 
         sortedQueue.erase(sortedQueue.begin());
         queueNodes.erase(currentNode);
 
-        visitedNodes[currentNode.unit.stateIndex()].insert(make_pair(currentNode.nodeIndex(), currentNode));
+        visitedNodes[currentNode.getUnit().stateIndex()].insert(make_pair(currentNode.nodeIndex(), currentNode));
 
+        UnitAction & action = unitActions[Game::unitIndexById(unitId)];
         for (int vel = -1; vel <= 1; vel += 2) {
+
             action.velocity = properties.unitMaxHorizontalSpeed * vel;
 
             for (int jumpState = -1; jumpState <= 1; ++jumpState) {
-                Unit u(currentNode.unit);
+                Simulation sima(currentNode.world);
 
                 switch(jumpState) {
                     case -1:
@@ -236,16 +289,27 @@ int Game::aStarPathInit(const Unit &u, const vector<LootBox> & loots, Debug & de
                         break;
                 }
 
-                vector<Unit> allyUnits;
+
                 if (allyUnitPathSize > 0) {
-                    allyUnits.push_back(allyUnitPathSize > currentNode.timeCostFromStart ? allyUnitPath[currentNode.timeCostFromStart].unit : allyUnitPath[allyUnitPathSize - 1].unit);
+                    UnitAction & allyUnitAction = unitActions[Game::unitIndexById(allyUnitPath.front().unitId)];
+
+                    if (allyUnitPathSize > currentNode.timeCostFromStart) {
+                        AstarNode & allyUnitNode = allyUnitPath[currentNode.timeCostFromStart];
+                        allyUnitAction.velocity = allyUnitNode.vel;
+                        allyUnitAction.jump = allyUnitNode.jump;
+                        allyUnitAction.jumpDown = allyUnitNode.jumpDown;
+                    } else {
+                        allyUnitAction.velocity = 0;
+                        allyUnitAction.jump = false;
+                        allyUnitAction.jumpDown = false;
+                    }
                 }
 
+                sima.tick(unitActions, 1);
 
-                u.applyAction(action, allyUnits);
-
-                int current_x = (int)(u.position.x * Consts::ppFieldSize);
-                int current_y = (int)(u.position.y * Consts::ppFieldSize);
+                Unit & unit = sima.units[Game::unitIndexById(unitId)];
+                int current_x = (int)(unit.position.x * Consts::ppFieldSize);
+                int current_y = (int)(unit.position.y * Consts::ppFieldSize);
 
                 int timeCost = currentNode.timeCostFromStart + 1;
                 float hCost = fCost(goal_x, goal_y, current_x, current_y);
@@ -253,29 +317,30 @@ int Game::aStarPathInit(const Unit &u, const vector<LootBox> & loots, Debug & de
                 AstarNode node = {
                         .x = current_x,
                         .y = current_y,
+                        .unitId = unitId,
                         .vel = action.velocity,
                         .jump = action.jump,
                         .jumpDown = action.jumpDown,
                         .timeCostFromStart = timeCost,
                         .distanceCostToFinish = hCost,
-                        .unit = u,
+                        .world = sima,
                         .parentNodeIndex = currentNode.nodeIndex(),
-                        .parentNodeStateIndex = currentNode.unit.stateIndex()
+                        .parentNodeStateIndex = currentNode.getUnit().stateIndex()
                         };
 
-                if (visitedNodes[u.stateIndex()].find(node.nodeIndex()) != visitedNodes[u.stateIndex()].end()) {
+                if (visitedNodes[unit.stateIndex()].find(node.nodeIndex()) != visitedNodes[unit.stateIndex()].end()) {
                     continue;
                 }
 
                 if (queueNodes.find(node) != queueNodes.end()) {
                     auto & n = *queueNodes.find(node);
 
-                    if (n.timeCostFromStart > timeCost) {
+                    if (n.timeCostFromStart > timeCost and n.getConstUnit().health == node.getConstUnit().health) {
                         sortedQueue.erase(n);
 
                         n.timeCostFromStart = timeCost;
                         n.parentNodeIndex = currentNode.nodeIndex();
-                        n.parentNodeStateIndex = currentNode.unit.stateIndex();
+                        n.parentNodeStateIndex = currentNode.getUnit().stateIndex();
 
                         sortedQueue.insert(n);
                     }
@@ -308,6 +373,8 @@ Game * Game::updateTick(InputStream &stream) {
     game->aliveAllyUnits = list<int>();
     game->aliveEnemyUnits = list<int>();
     game->aliveUnits = list<int>();
+    game->enemies = vector<LootBox>();
+    game->newBullet = false;
 
     int unitSize = stream.readInt();
 
@@ -322,8 +389,20 @@ Game * Game::updateTick(InputStream &stream) {
             game->aliveAllyUnits.push_back(unitId);
         } else {
             game->aliveEnemyUnits.push_back(unitId);
+
+            game->enemies.push_back(LootBox(
+                    game->units[Game::unitIndexById(unitId)].position,
+                    game->units[Game::unitIndexById(unitId)].size,
+                    nullptr)
+            );
+
+            if (game->units[Game::unitIndexById(unitId)].weapon != nullptr) {
+                game->newBullet = game->newBullet or (game->units[Game::unitIndexById(unitId)].weapon.get()->lastFireTick == (game->currentTick - 1));
+            }
         }
         game->aliveUnits.push_back(unitId);
+
+
     }
 
     game->bullets = std::vector<Bullet>(stream.readInt());

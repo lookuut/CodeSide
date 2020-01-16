@@ -28,9 +28,10 @@
 #include "../model/LootBox.hpp"
 #include "../model/UnitAction.hpp"
 #include "../Consts.h"
-#include "../model/Game.hpp"
 #include <math.h>
 #include <vector>
+
+class Game;
 
 class Simulation {
 private:
@@ -58,6 +59,7 @@ public:
     vector<int> lootWeaponIds;
 
     Simulation(Game * game, Debug * debug);
+    Simulation();
 
     void update();
 
@@ -74,7 +76,9 @@ public:
     std::string toString() const;
     void pickUpLoots(Unit & unit);
 
-    void unitTick(Unit & unit, vector<Unit> & units, const UnitAction & action);
+    void unitTick(Unit & unit, const UnitAction & action);
+
+    Unit & getUnit(int unitId);
 };
 
 #endif //AICUP2019_ARENA_HPP

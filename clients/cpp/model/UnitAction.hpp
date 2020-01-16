@@ -29,6 +29,23 @@ public:
     static UnitAction readFrom(InputStream& stream);
     void writeTo(OutputStream& stream) const;
     std::string toString() const;
+
+    void setJumpState(int jumpState) {
+        switch (jumpState) {
+            case -1:
+                jump = false;
+                jumpDown = false;
+                break;
+            case 0:
+                jump = true;
+                jumpDown = false;
+                break;
+            case 1:
+                jump = false;
+                jumpDown = true;
+                break;
+        }
+    }
 };
 
 #endif

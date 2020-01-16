@@ -25,7 +25,7 @@
 
 using namespace std;
 
-class Unit {
+class Unit{
 
 private:
     void updateTilePos();
@@ -45,6 +45,8 @@ public:
 
     Vec2Float leftTop;
     Vec2Float rightDown;
+
+    int jumpLevel;
 
     int onGroundLadderTicks = 0;
 
@@ -105,7 +107,7 @@ public:
     void downing(double vel);
 
     bool isOnLadder();
-    bool isOnGround();
+    bool canPlantMine() const;
     bool isOnWall();
     bool isInGround();
     bool isOnPlatform()const;
@@ -120,10 +122,10 @@ public:
     void applyOnGround();
     void applyJump(double speed, double maxTime);
     void applyJumpCancel();
-    void applyAction(const UnitAction & action, vector<Unit> & units);
+    void applyAction(const UnitAction & action, vector<Unit> & units, const list<int> & aliveUnits);
     int collisionWithWallMicrotick(const UnitAction & action);
 
-    void applyActionMicroticks(const UnitAction & action, vector<Unit> & units, int microticks);
+    void applyActionMicroticks(const UnitAction & action, vector<Unit> & units, int microticks, const list<int> & aliveUnits);
 
     bool isInside(const Vec2Double &point) const;
     bool isOverlap(const Bullet & bullet) const;
@@ -150,7 +152,7 @@ public:
     bool checkAim(const Unit & enemy, Vec2Double & aim, const list<int> & allies, const vector<Unit> & units) const;
 
     int actionType() const;
-    bool shootable(const Unit &unit) const;
+    bool shootable(const LootBox &unit) const;
 
 
     pair<int, Vec2Double> chooseEnemy(const list<int> & enemyIds, const vector<Unit> & enemies, int choosenEnemyId) const;
@@ -158,6 +160,7 @@ public:
     double enemyValue(const Unit & enemy, bool alreadyChoosed, const Vec2Double & aim) const;
 
     int stateIndex();
+    int stateId() const;
 };
 
 

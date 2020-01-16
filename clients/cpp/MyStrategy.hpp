@@ -22,9 +22,20 @@ private:
 
     vector<UnitAction> actions;
 
+    vector<LootBox> enemies;
+    vector<LootBox> weapons;
+    vector<LootBox> mines;
+    vector<LootBox> healthPacks;
+
+    vector<LootBox> unitTarget;
+    vector<int> unitTargetId;
+    vector<int> unitTargetType;
+
+    vector<int> suicideMines;
+
     MinMax minMax;
     Game * game;
-
+    Debug * debug;
 public:
 
   MyStrategy(
@@ -38,6 +49,10 @@ public:
 
   UnitAction simulationTest(const Unit &unit, const Game &game, Debug &debug);
   bool simulationEqualTests(const Unit & simulatedUnit, const Unit & unit, const Game & game) const;
+  void updateUnitPath(vector<LootBox> & targets, int unitId, bool isEnemy);
+  bool canUpdateUnitPath(int unitId);
+
+  void suicide(const Unit & unit, UnitAction & action);
 };
 
 #endif
