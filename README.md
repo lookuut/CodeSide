@@ -1,5 +1,7 @@
-# AI Cup 2019
+# AI Cup 2019 CodeSide
 
-This repository contains clients and documentation sources for AI Cup 2019
+Final 45, Stage 2 52, Stage 18
+
+Из интересного внутри, Астар, симуляция, потиковый перебор состояний мира 
 
 Latest changes can be found in the [changelog](CHANGELOG.md)
